@@ -210,11 +210,17 @@ function MasterLoginForm({
       className="space-y-4"
     >
       <p className="text-gray-400 text-sm text-center">Sign in to your master account</p>
-      <div className="space-y-3">
+      <form
+        onSubmit={(e) => { e.preventDefault(); handleSubmit(); }}
+        className="space-y-3"
+        autoComplete="on"
+      >
         <div className="relative">
           <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-500" />
           <Input
             type="email"
+            name="email"
+            autoComplete="email"
             placeholder="Email address"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
@@ -226,10 +232,11 @@ function MasterLoginForm({
           <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-500" />
           <Input
             type={showPw ? "text" : "password"}
+            name="password"
+            autoComplete="current-password"
             placeholder="Password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
             className="bg-white/10 border-white/20 text-white placeholder:text-gray-500 pl-10 pr-10 h-12"
           />
           <button
@@ -240,19 +247,19 @@ function MasterLoginForm({
             {showPw ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
           </button>
         </div>
-      </div>
-      {error && (
-        <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-red-400 text-sm text-center">
-          {error}
-        </motion.p>
-      )}
-      <Button
-        className="w-full h-12 bg-white text-black hover:bg-gray-200 font-semibold"
-        onClick={handleSubmit}
-        disabled={loading || !email || !password}
-      >
-        {loading ? "Signing in..." : "Sign In"}
-      </Button>
+        {error && (
+          <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-red-400 text-sm text-center">
+            {error}
+          </motion.p>
+        )}
+        <Button
+          type="submit"
+          className="w-full h-12 bg-white text-black hover:bg-gray-200 font-semibold"
+          disabled={loading || !email || !password}
+        >
+          {loading ? "Signing in..." : "Sign In"}
+        </Button>
+      </form>
       <Button variant="ghost" className="w-full text-gray-500 hover:text-gray-300" onClick={onBack}>
         ← Back
       </Button>
@@ -307,10 +314,16 @@ function MasterSignupForm({
       className="space-y-4"
     >
       <p className="text-gray-400 text-sm text-center">Create your business account</p>
-      <div className="space-y-3">
+      <form
+        onSubmit={(e) => { e.preventDefault(); handleSubmit(); }}
+        className="space-y-3"
+        autoComplete="on"
+      >
         <div className="relative">
           <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-500" />
           <Input
+            name="organization"
+            autoComplete="organization"
             placeholder="Business name"
             value={businessName}
             onChange={(e) => setBusinessName(e.target.value)}
@@ -322,6 +335,8 @@ function MasterSignupForm({
           <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-500" />
           <Input
             type="email"
+            name="email"
+            autoComplete="email"
             placeholder="Email address"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
@@ -330,6 +345,8 @@ function MasterSignupForm({
         </div>
         <Input
           type="tel"
+          name="tel"
+          autoComplete="tel"
           placeholder="Phone (optional)"
           value={phone}
           onChange={(e) => setPhone(e.target.value)}
@@ -339,10 +356,11 @@ function MasterSignupForm({
           <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-500" />
           <Input
             type={showPw ? "text" : "password"}
+            name="new-password"
+            autoComplete="new-password"
             placeholder="Password (min 6 characters)"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
             className="bg-white/10 border-white/20 text-white placeholder:text-gray-500 pl-10 pr-10 h-12"
           />
           <button
@@ -353,19 +371,19 @@ function MasterSignupForm({
             {showPw ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
           </button>
         </div>
-      </div>
-      {error && (
-        <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-red-400 text-sm text-center">
-          {error}
-        </motion.p>
-      )}
-      <Button
-        className="w-full h-12 bg-white text-black hover:bg-gray-200 font-semibold"
-        onClick={handleSubmit}
-        disabled={loading || !businessName || !email || !password}
-      >
-        {loading ? "Creating account..." : "Create Account"}
-      </Button>
+        {error && (
+          <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-red-400 text-sm text-center">
+            {error}
+          </motion.p>
+        )}
+        <Button
+          type="submit"
+          className="w-full h-12 bg-white text-black hover:bg-gray-200 font-semibold"
+          disabled={loading || !businessName || !email || !password}
+        >
+          {loading ? "Creating account..." : "Create Account"}
+        </Button>
+      </form>
       <Button variant="ghost" className="w-full text-gray-500 hover:text-gray-300" onClick={onBack}>
         ← Back
       </Button>
@@ -417,8 +435,14 @@ function StaffLoginForm({
       className="space-y-4"
     >
       <p className="text-gray-400 text-sm text-center">Enter your business code and PIN</p>
-      <div className="space-y-3">
+      <form
+        onSubmit={(e) => { e.preventDefault(); handleSubmit(); }}
+        className="space-y-3"
+        autoComplete="on"
+      >
         <Input
+          name="username"
+          autoComplete="username"
           placeholder="Business Code (e.g. BATRA1234)"
           value={businessCode}
           onChange={(e) => setBusinessCode(e.target.value.toUpperCase())}
@@ -427,27 +451,28 @@ function StaffLoginForm({
         />
         <Input
           type="password"
+          name="current-password"
+          autoComplete="current-password"
           placeholder="PIN"
           value={pin}
           onChange={(e) => setPin(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
           className="bg-white/10 border-white/20 text-white placeholder:text-gray-500 h-12 text-center text-2xl tracking-[0.5em]"
           maxLength={8}
           inputMode="numeric"
         />
-      </div>
-      {error && (
-        <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-red-400 text-sm text-center">
-          {error}
-        </motion.p>
-      )}
-      <Button
-        className="w-full h-12 bg-white text-black hover:bg-gray-200 font-semibold"
-        onClick={handleSubmit}
-        disabled={loading || !businessCode || !pin}
-      >
-        {loading ? "Signing in..." : "Staff Sign In"}
-      </Button>
+        {error && (
+          <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-red-400 text-sm text-center">
+            {error}
+          </motion.p>
+        )}
+        <Button
+          type="submit"
+          className="w-full h-12 bg-white text-black hover:bg-gray-200 font-semibold"
+          disabled={loading || !businessCode || !pin}
+        >
+          {loading ? "Signing in..." : "Staff Sign In"}
+        </Button>
+      </form>
       <Button variant="ghost" className="w-full text-gray-500 hover:text-gray-300" onClick={onBack}>
         ← Back
       </Button>
