@@ -9,6 +9,6 @@
 export interface Staff {
   id: number;
   name: string;
-  commissionRate: number;
+  salary: number;
   createdAt: string;
 }

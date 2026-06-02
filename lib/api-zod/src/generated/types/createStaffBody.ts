@@ -8,5 +8,5 @@
 
 export interface CreateStaffBody {
   name: string;
-  commissionRate: number;
+  salary: number;
 }

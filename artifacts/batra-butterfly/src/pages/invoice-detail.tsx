@@ -250,7 +250,7 @@ export default function InvoiceDetail() {
               <div>
                 <p className="text-sm font-semibold text-green-300">Invoice Confirmed</p>
                 <p className="text-xs text-green-400/70 mt-0.5">
-                  Stock quantities updated · Retailer ledger debited · Staff commission recorded
+                  Stock quantities updated · Retailer ledger debited · Sale recorded
                 </p>
               </div>
             </CardContent>
@@ -289,7 +289,7 @@ export default function InvoiceDetail() {
       )}
 
       <p className="text-xs text-gray-700 text-center">
-        Confirming will deduct stock, record a ledger sale for {invoice.retailerName}, and log commission for {invoice.staffName}
+        Confirming will deduct stock and record a ledger sale for {invoice.retailerName}
       </p>
     </div>
   );

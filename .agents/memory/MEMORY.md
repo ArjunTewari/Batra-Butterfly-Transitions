@@ -1,2 +1,3 @@
-- [api-zod codegen & lib dts gotchas](api-zod-codegen.md) — after orval codegen, rebuild lib dts (`tsc --build lib/*/tsconfig.json --force`); zod const names come from operationId; api-zod barrel exports zod values only (else TS2308).
-- [Invoice by-id account scoping](invoice-account-scoping.md) — by-id DB helpers must filter by accountId (IDOR); create routes must verify FK ownership; new response columns must be selected in every endpoint returning that shape.
+- [api-zod-codegen](api-zod-codegen.md) — after codegen, lib/api-zod barrel must export only `./generated/api`, NOT `./generated/types` (causes TS2308 duplicate exports)
+- [db-lib-rebuild](db-lib-rebuild.md) — after editing lib/db/src/schema/*.ts, must run `pnpm tsc --build lib/db/tsconfig.json --force` before api-server typecheck picks up new columns
+- [drizzle-push-interactive](drizzle-push-interactive.md) — drizzle-kit push is interactive and blocks in non-interactive bash; use direct SQL (`ALTER TABLE ... ADD COLUMN IF NOT EXISTS`) for single-column additions

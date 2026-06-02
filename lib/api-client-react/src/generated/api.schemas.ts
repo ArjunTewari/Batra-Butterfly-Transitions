@@ -94,23 +94,21 @@ export interface RetailerAnalytics {
 export interface Staff {
   id: number;
   name: string;
-  commissionRate: number;
+  salary: number;
   createdAt: string;
 }
 
 export interface CreateStaffBody {
   name: string;
-  commissionRate: number;
+  salary: number;
 }
 
 export interface StaffPerformance {
   id: number;
   name: string;
-  commissionRate: number;
   totalSales: number;
   totalOrders: number;
   avgOrderValue: number;
-  commission: number;
 }
 
 export interface Sale {

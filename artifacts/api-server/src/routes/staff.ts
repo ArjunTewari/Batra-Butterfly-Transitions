@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
-import { eq, and, inArray, count } from "drizzle-orm";
-import { db, staffTable, salesTable, invoicesTable, invoiceItemsTable } from "@workspace/db";
+import { eq, and } from "drizzle-orm";
+import { db, staffTable, salesTable, invoicesTable } from "@workspace/db";
 import {
   CreateStaffBody,
   GetStaffPerformanceQueryParams,
@@ -11,10 +11,8 @@ import { requireAuth } from "../middleware/requireAuth";
 
 const router: IRouter = Router();
 
-// Commission is a flat ₹1 per invoice line item across the staff member's
-// confirmed invoices (not a percentage of sales value).
 async function computeStaffPerformance(
-  staff: { id: number; name: string; commissionRate: string },
+  staff: { id: number; name: string; salary: string },
   accountId: number,
   month?: number,
   year?: number
@@ -34,23 +32,12 @@ async function computeStaffPerformance(
   const totalOrders = filtered.length;
   const avgOrderValue = totalOrders > 0 ? totalSales / totalOrders : 0;
 
-  let commission = 0;
-  if (filtered.length > 0) {
-    const [row] = await db
-      .select({ c: count() })
-      .from(invoiceItemsTable)
-      .where(inArray(invoiceItemsTable.invoiceId, filtered.map((i) => i.id)));
-    commission = Number(row?.c ?? 0);
-  }
-
   return {
     id: staff.id,
     name: staff.name,
-    commissionRate: parseFloat(staff.commissionRate),
     totalSales,
     totalOrders,
     avgOrderValue,
-    commission,
   };
 }
 
@@ -60,7 +47,7 @@ router.get("/staff", requireAuth, async (req, res): Promise<void> => {
   res.json(staffList.map((s) => ({
     id: s.id,
     name: s.name,
-    commissionRate: parseFloat(s.commissionRate),
+    salary: parseFloat(s.salary),
     createdAt: s.createdAt.toISOString(),
   })));
 });
@@ -75,12 +62,12 @@ router.post("/staff", requireAuth, async (req, res): Promise<void> => {
   const [staff] = await db.insert(staffTable).values({
     accountId,
     name: parsed.data.name,
-    commissionRate: String(parsed.data.commissionRate),
+    salary: String(parsed.data.salary),
   }).returning();
   res.status(201).json({
     id: staff.id,
     name: staff.name,
-    commissionRate: parseFloat(staff.commissionRate),
+    salary: parseFloat(staff.salary),
     createdAt: staff.createdAt.toISOString(),
   });
 });

@@ -318,7 +318,7 @@ export default function StaffDetail() {
               <Wallet className="h-5 w-5" /> Salary Overview
             </CardTitle>
             <CardDescription className="text-gray-400">
-              {MONTHS[month - 1]} {year} · commission ₹1 per invoiced item
+              {MONTHS[month - 1]} {year}
             </CardDescription>
           </CardHeader>
           <CardContent>

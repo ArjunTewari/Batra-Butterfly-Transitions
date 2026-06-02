@@ -1313,14 +1313,14 @@ components:
           type: integer
         name:
           type: string
-        commissionRate:
+        salary:
           type: number
         createdAt:
           type: string
       required:
         - id
         - name
-        - commissionRate
+        - salary
         - createdAt
 
     CreateStaffBody:
@@ -1328,11 +1328,11 @@ components:
       properties:
         name:
           type: string
-        commissionRate:
+        salary:
           type: number
       required:
         - name
-        - commissionRate
+        - salary
 
     StaffPerformance:
       type: object
@@ -1341,24 +1341,18 @@ components:
           type: integer
         name:
           type: string
-        commissionRate:
-          type: number
         totalSales:
           type: number
         totalOrders:
           type: integer
         avgOrderValue:
           type: number
-        commission:
-          type: number
       required:
         - id
         - name
-        - commissionRate
         - totalSales
         - totalOrders
         - avgOrderValue
-        - commission
 
     Sale:
       type: object

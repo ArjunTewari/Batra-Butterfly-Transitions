@@ -9,9 +9,7 @@
 export interface StaffPerformance {
   id: number;
   name: string;
-  commissionRate: number;
   totalSales: number;
   totalOrders: number;
   avgOrderValue: number;
-  commission: number;
 }

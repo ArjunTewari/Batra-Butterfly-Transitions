@@ -171,7 +171,7 @@ export const GetUnderBuyingRetailersResponse = zod.array(
 export const ListStaffResponseItem = zod.object({
   id: zod.number(),
   name: zod.string(),
-  commissionRate: zod.number(),
+  salary: zod.number(),
   createdAt: zod.string(),
 });
 export const ListStaffResponse = zod.array(ListStaffResponseItem);
@@ -181,7 +181,7 @@ export const ListStaffResponse = zod.array(ListStaffResponseItem);
  */
 export const CreateStaffBody = zod.object({
   name: zod.string(),
-  commissionRate: zod.number(),
+  salary: zod.number(),
 });
 
 /**
@@ -195,11 +195,9 @@ export const GetStaffPerformanceQueryParams = zod.object({
 export const GetStaffPerformanceResponseItem = zod.object({
   id: zod.number(),
   name: zod.string(),
-  commissionRate: zod.number(),
   totalSales: zod.number(),
   totalOrders: zod.number(),
   avgOrderValue: zod.number(),
-  commission: zod.number(),
 });
 export const GetStaffPerformanceResponse = zod.array(
   GetStaffPerformanceResponseItem,
@@ -215,11 +213,9 @@ export const GetStaffDetailParams = zod.object({
 export const GetStaffDetailResponse = zod.object({
   id: zod.number(),
   name: zod.string(),
-  commissionRate: zod.number(),
   totalSales: zod.number(),
   totalOrders: zod.number(),
   avgOrderValue: zod.number(),
-  commission: zod.number(),
 });
 
 /**
@@ -402,7 +398,7 @@ export const EnrollStaffFaceBody = zod.object({
 export const EnrollStaffFaceResponse = zod.object({
   id: zod.number(),
   name: zod.string(),
-  commissionRate: zod.number(),
+  salary: zod.number(),
   createdAt: zod.string(),
 });
 
