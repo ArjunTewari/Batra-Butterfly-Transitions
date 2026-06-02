@@ -113,13 +113,15 @@ router.post("/stock/analyze", requireAuth, async (req, res): Promise<void> => {
   const imageCount = images.length;
   content.push({
     type: "text",
-    text: `You are a footwear inventory assistant. Analyze ${imageCount > 1 ? `these ${imageCount} shoe images` : "this shoe image"} and identify which article code it most likely matches from the inventory list below.
+    text: `You are a footwear inventory assistant. Analyze ${imageCount > 1 ? `these ${imageCount} footwear images` : "this footwear image"} and identify which article code it most likely matches from the inventory list below.
+
+The image may contain shoes, chappals, slides, sandals, boots, or any type of footwear.
 
 Existing inventory:
 ${articleCodeList || "(no products yet)"}
 
 Instructions:
-- ${imageCount > 1 ? "Look at ALL images to get the best view of the shoe" : "Look at the shoe style, color, design, and type"}
+- ${imageCount > 1 ? "Look at ALL images to get the best view of the footwear" : "Look at the footwear style, color, design, and type (shoe, chappal, slide, sandal, boot)"}
 - Match it to the most likely article code from the list above
 - If you cannot confidently match it to any existing article, suggest:
   - A new article code in format "BB-NEW-001"
@@ -132,7 +134,7 @@ Return this exact JSON format:
   "predictedArticleCode": "BB-XXX",
   "confidence": 0.85,
   "reasoning": "Brief reason for the match",
-  "suggestedName": "Shoe Name",
+  "suggestedName": "Footwear Name",
   "suggestedPrice": 999
 }`,
   });
@@ -315,7 +317,7 @@ router.post("/stock/analyze-sale", requireAuth, async (req, res): Promise<void> 
           { type: "image", source: { type: "base64", media_type: mediaType, data: rawBase64 } },
           {
             type: "text",
-            text: `You are a footwear inventory assistant. Analyze this image which shows multiple footwear items that have been sold. Identify each distinct shoe/item visible and match it to the inventory list.
+            text: `You are a footwear inventory assistant. Analyze this image which shows multiple footwear items that have been sold. Identify each distinct shoe/slide/chappal/sandal/boot/item visible and match it to the inventory list.
 
 Existing inventory:
 ${articleCodeList || "(no products yet)"}
