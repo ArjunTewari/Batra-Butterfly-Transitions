@@ -1,0 +1,14 @@
+{
+  "extends": "expo/tsconfig.base",
+  "compilerOptions": {
+    "strict": false,
+    "target": "ES2019",
+    "lib": ["ES2019"],
+    "useDefineForClassFields": false,
+    "baseUrl": ".",
+    "paths": {
+      "@hooks/*": ["./hooks/*"],
+      "@/*": ["./*"]
+    }
+  }
+}

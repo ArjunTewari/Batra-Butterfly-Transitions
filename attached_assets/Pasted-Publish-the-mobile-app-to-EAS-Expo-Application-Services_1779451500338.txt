@@ -1,0 +1,62 @@
+Publish the mobile app to EAS (Expo Application Services) for internal distribution. Here are the exact credentials and configuration to use:
+Expo Account: arjuntewari0505@gmail.com
+Project ID: cd5056fc-36cf-4ca8-ae46-8d2c570f0666
+Project Slug: batra-butterfly-mobile-ovr6maggmt0gka4vm3efl
+App name: Batra Butterfly Mobile
+Bundle ID (iOS): com.batra.butterfly
+Package (Android): com.batra.butterfly
+Backend URL: batra-butterfly-transitions--arjuntewari0505.replit.app
+Use the following app.json:
+json{
+  "expo": {
+    "name": "Batra Butterfly Mobile",
+    "slug": "batra-butterfly-mobile-ovr6maggmt0gka4vm3efl",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "jsEngine": "jsc",
+    "platforms": ["ios", "android"],
+    "ios": { "bundleIdentifier": "com.batra.butterfly", "jsEngine": "jsc" },
+    "android": { "package": "com.batra.butterfly", "jsEngine": "jsc" },
+    "extra": { "eas": { "projectId": "cd5056fc-36cf-4ca8-ae46-8d2c570f0666" } }
+  }
+}
+Use the following eas.json:
+json{
+  "cli": { "version": ">= 14.0.0" },
+  "build": {
+    "preview": {
+      "distribution": "internal",
+      "channel": "preview",
+      "android": { "buildType": "apk" }
+    }
+  }
+}
+Use the following babel.config.js:
+jsmodule.exports = function(api) {
+  api.cache(true);
+  return {
+    presets: [["babel-preset-expo", { unstable_transformImportMeta: true }]],
+    plugins: [["module-resolver", { root: ["."], alias: { "@hooks": "./hooks", "@": "." } }]]
+  };
+};
+Use the following tsconfig.json:
+json{
+  "extends": "expo/tsconfig.base",
+  "compilerOptions": {
+    "strict": false,
+    "target": "ES2019",
+    "lib": ["ES2019"],
+    "useDefineForClassFields": false,
+    "baseUrl": ".",
+    "paths": { "@hooks/*": ["./hooks/*"], "@/*": ["./*"] }
+  }
+}
+Steps to execute in the artifacts/batra-butterfly-mobile directory:
+
+Write all config files above
+Run pnpm add babel-preset-expo babel-plugin-module-resolver
+Run pnpm install
+Set env variable: EXPO_PUBLIC_DOMAIN=batra-butterfly-transitions--arjuntewari0505.replit.app
+Run npx eas-cli@latest build --profile preview --platform android to build Android
+Run npx eas-cli@latest build --profile preview --platform ios to build iOS
+Share the resulting install URLs

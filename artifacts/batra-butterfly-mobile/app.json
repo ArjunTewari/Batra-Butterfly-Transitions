@@ -1,0 +1,27 @@
+{
+  "expo": {
+    "name": "Batra Butterfly Mobile",
+    "slug": "batra-butterfly-mobile-ovr6maggmt0gka4vm3efl",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "platforms": [
+      "ios",
+      "android",
+      "web"
+    ],
+    "ios": {
+      "bundleIdentifier": "com.batra.butterfly",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    },
+    "android": {
+      "package": "com.batra.butterfly"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "cd5056fc-36cf-4ca8-ae46-8d2c570f0666"
+      }
+    }
+  }
+}

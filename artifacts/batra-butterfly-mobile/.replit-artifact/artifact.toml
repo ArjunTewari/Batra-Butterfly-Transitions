@@ -1,0 +1,27 @@
+kind = "mobile"
+previewPath = "/native/"
+title = "Batra Butterfly Mobile"
+version = "1.0.0"
+id = "artifacts/batra-butterfly-mobile"
+router = "expo-domain"
+
+[[integratedSkills]]
+name = "expo"
+version = "1.0.0"
+
+[[services]]
+ensurePreviewReachable = "/status"
+name = "expo"
+paths = [ "/native/" ]
+localPort = 18243
+
+[services.development]
+run = "EXPO_PACKAGER_PROXY_URL=https://$REPLIT_EXPO_DEV_DOMAIN EXPO_PUBLIC_DOMAIN=$REPLIT_DEV_DOMAIN EXPO_PUBLIC_REPL_ID=$REPL_ID REACT_NATIVE_PACKAGER_HOSTNAME=$REPLIT_DEV_DOMAIN pnpm --filter @workspace/batra-butterfly-mobile exec expo start --web --localhost --port $PORT"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/batra-butterfly-mobile", "run", "build" ]
+run = [ "pnpm", "--filter", "@workspace/batra-butterfly-mobile", "run", "serve" ]
+
+[services.env]
+PORT = "18243"
+BASE_PATH = "/native/"

@@ -1,0 +1,2050 @@
+openapi: 3.1.0
+info:
+  # Do not change the title, if the title changes, the import paths will be broken
+  title: Api
+  version: 0.1.0
+  description: Batra Butterfly Footwear Business OS API
+servers:
+  - url: /api
+    description: Base API path
+tags:
+  - name: health
+    description: Health operations
+  - name: retailers
+    description: Retailer credit operations
+  - name: analytics
+    description: Analytics and reporting
+  - name: staff
+    description: Staff performance
+  - name: stock
+    description: Stock management
+  - name: dashboard
+    description: Dashboard summary
+  - name: invoices
+    description: Invoice management
+  - name: suppliers
+    description: Supplier management and bill scanning
+  - name: payment
+    description: Payment clearance operations
+paths:
+  /healthz:
+    get:
+      operationId: healthCheck
+      tags: [health]
+      summary: Health check
+      description: Returns server health status
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+
+  /retailers:
+    get:
+      operationId: listRetailers
+      tags: [retailers]
+      summary: List all retailers
+      responses:
+        "200":
+          description: List of retailers with credit summary
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/RetailerSummary"
+    post:
+      operationId: createRetailer
+      tags: [retailers]
+      summary: Create a new retailer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateRetailerBody"
+      responses:
+        "201":
+          description: Created retailer
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Retailer"
+
+  /retailers/{id}:
+    get:
+      operationId: getRetailer
+      tags: [retailers]
+      summary: Get retailer detail
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Retailer detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RetailerSummary"
+        "404":
+          description: Not found
+    patch:
+      operationId: updateRetailer
+      tags: [retailers]
+      summary: Update a retailer
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateRetailerBody"
+      responses:
+        "200":
+          description: Updated retailer
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Retailer"
+        "404":
+          description: Not found
+    delete:
+      operationId: deleteRetailer
+      tags: [retailers]
+      summary: Delete a retailer
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  /retailers/{id}/ledger:
+    get:
+      operationId: getRetailerLedger
+      tags: [retailers]
+      summary: Get retailer ledger entries
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Ledger entries
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/LedgerEntry"
+
+  /retailers/{id}/ledger/entry:
+    post:
+      operationId: addLedgerEntry
+      tags: [retailers]
+      summary: Add a ledger entry (sale or payment)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateLedgerEntryBody"
+      responses:
+        "201":
+          description: Created entry
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LedgerEntry"
+
+  /analytics/top-retailers:
+    get:
+      operationId: getTopRetailers
+      tags: [analytics]
+      summary: Get top retailers by purchase
+      parameters:
+        - name: days
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 30
+      responses:
+        "200":
+          description: Top retailers list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/RetailerAnalytics"
+
+  /analytics/under-buying:
+    get:
+      operationId: getUnderBuyingRetailers
+      tags: [analytics]
+      summary: Get under-performing retailers
+      responses:
+        "200":
+          description: Under-buying retailers
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/RetailerAnalytics"
+
+  /staff:
+    get:
+      operationId: listStaff
+      tags: [staff]
+      summary: List all staff
+      responses:
+        "200":
+          description: Staff list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Staff"
+    post:
+      operationId: createStaff
+      tags: [staff]
+      summary: Create staff member
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateStaffBody"
+      responses:
+        "201":
+          description: Created staff
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Staff"
+
+  /staff/performance:
+    get:
+      operationId: getStaffPerformance
+      tags: [staff]
+      summary: Get staff performance metrics
+      parameters:
+        - name: month
+          in: query
+          required: false
+          schema:
+            type: integer
+        - name: year
+          in: query
+          required: false
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Staff performance list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/StaffPerformance"
+
+  /staff/{id}:
+    get:
+      operationId: getStaffDetail
+      tags: [staff]
+      summary: Get staff member details and performance
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Staff detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StaffPerformance"
+        "404":
+          description: Not found
+
+  /sales:
+    post:
+      operationId: createSale
+      tags: [staff]
+      summary: Record a sale
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateSaleBody"
+      responses:
+        "201":
+          description: Created sale
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Sale"
+
+  /stock:
+    get:
+      operationId: listStock
+      tags: [stock]
+      summary: List stock items
+      responses:
+        "200":
+          description: Stock list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/StockItem"
+    post:
+      operationId: createStockItem
+      tags: [stock]
+      summary: Create a stock product
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateStockItemBody"
+      responses:
+        "201":
+          description: Created stock item
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StockItem"
+
+  /stock/analyze:
+    post:
+      operationId: analyzeStockImage
+      tags: [stock]
+      summary: Analyze uploaded image for article code suggestion
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AnalyzeImageBody"
+      responses:
+        "200":
+          description: AI analysis result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImageAnalysisResult"
+
+  /stock/confirm:
+    post:
+      operationId: confirmStockMovement
+      tags: [stock]
+      summary: Confirm stock movement after image analysis
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ConfirmStockBody"
+      responses:
+        "201":
+          description: Stock movement confirmed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StockMovement"
+
+  /stock/analyze-sale:
+    post:
+      operationId: analyzeSaleImage
+      tags: [stock]
+      summary: Analyze a sale image to detect multiple sold items
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AnalyzeSaleImageBody"
+      responses:
+        "200":
+          description: AI sale analysis result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SaleAnalysisResult"
+
+  /stock/confirm-sale:
+    post:
+      operationId: confirmSale
+      tags: [stock]
+      summary: Confirm a sale, deducting all detected items from stock
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ConfirmSaleBody"
+      responses:
+        "201":
+          description: Sale confirmed with stock deductions
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConfirmSaleResult"
+
+  /stock/movements:
+    get:
+      operationId: listStockMovements
+      tags: [stock]
+      summary: List stock movements
+      responses:
+        "200":
+          description: Stock movements
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/StockMovement"
+
+  /stock/products/{id}/images:
+    get:
+      operationId: listProductImages
+      tags: [stock]
+      summary: List all images for a product
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Product images
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ProductImage"
+
+  /dashboard/summary:
+    get:
+      operationId: getDashboardSummary
+      tags: [dashboard]
+      summary: Get dashboard summary KPIs
+      responses:
+        "200":
+          description: Dashboard summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardSummary"
+
+  /dashboard/activity:
+    get:
+      operationId: getRecentActivity
+      tags: [dashboard]
+      summary: Get recent activity feed
+      responses:
+        "200":
+          description: Recent activity
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ActivityItem"
+
+  /invoices:
+    get:
+      operationId: listInvoices
+      tags: [invoices]
+      summary: List all invoices
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: retailerId
+          in: query
+          required: false
+          schema:
+            type: integer
+        - name: staffId
+          in: query
+          required: false
+          schema:
+            type: integer
+        - name: from
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: to
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Invoice list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/InvoiceWithItems"
+    post:
+      operationId: createInvoice
+      tags: [invoices]
+      summary: Create a new invoice
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateInvoiceBody"
+      responses:
+        "201":
+          description: Created invoice
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InvoiceWithItems"
+
+  /invoices/daily-summary:
+    get:
+      operationId: getDailySalesSummary
+      tags: [invoices]
+      summary: Get daily sales summary
+      parameters:
+        - name: days
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 30
+      responses:
+        "200":
+          description: Daily sales grouped by date
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/DailySalesEntry"
+
+  /invoices/analyze-image:
+    post:
+      operationId: analyzeInvoiceImage
+      tags: [invoices]
+      summary: Analyze invoice photo with Claude AI
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AnalyzeInvoiceImageBody"
+      responses:
+        "200":
+          description: Extracted invoice data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InvoiceAnalysisResult"
+
+  /invoices/{id}:
+    get:
+      operationId: getInvoice
+      tags: [invoices]
+      summary: Get invoice by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Invoice detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InvoiceWithItems"
+        "404":
+          description: Not found
+    delete:
+      operationId: deleteInvoice
+      tags: [invoices]
+      summary: Delete a draft invoice
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  /invoices/{id}/confirm:
+    post:
+      operationId: confirmInvoice
+      tags: [invoices]
+      summary: Confirm invoice and cascade updates to stock, ledger, and commissions
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Confirmed invoice with cascade results
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InvoiceConfirmResult"
+        "404":
+          description: Not found
+
+  /suppliers:
+    get:
+      operationId: listSuppliers
+      tags: [suppliers]
+      summary: List all suppliers
+      responses:
+        "200":
+          description: List of suppliers
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SupplierSummary"
+    post:
+      operationId: createSupplier
+      tags: [suppliers]
+      summary: Create a new supplier
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateSupplierBody"
+      responses:
+        "201":
+          description: Created supplier
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Supplier"
+
+  /suppliers/{id}:
+    get:
+      operationId: getSupplier
+      tags: [suppliers]
+      summary: Get supplier detail with bills
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Supplier with bill history
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SupplierWithBills"
+        "404":
+          description: Not found
+
+  /suppliers/{id}/bills:
+    get:
+      operationId: listSupplierBills
+      tags: [suppliers]
+      summary: List bills for a supplier
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: List of supplier bills
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SupplierBillWithItems"
+    post:
+      operationId: createSupplierBill
+      tags: [suppliers]
+      summary: Create a supplier bill (draft)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateSupplierBillBody"
+      responses:
+        "201":
+          description: Created bill
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SupplierBillWithItems"
+
+  /suppliers/{id}/bills/scan:
+    post:
+      operationId: analyzeSupplierBill
+      tags: [suppliers]
+      summary: Analyze supplier bill image with AI
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AnalyzeSupplierBillBody"
+      responses:
+        "200":
+          description: Extracted bill data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SupplierBillAnalysisResult"
+
+  /suppliers/bills/{id}:
+    get:
+      operationId: getSupplierBill
+      tags: [suppliers]
+      summary: Get supplier bill detail
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Bill with items
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SupplierBillWithItems"
+        "404":
+          description: Not found
+
+  /suppliers/bills/{id}/confirm:
+    post:
+      operationId: confirmSupplierBill
+      tags: [suppliers]
+      summary: Confirm supplier bill and add stock
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Confirmed bill with stock updates
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SupplierBillConfirmResult"
+        "404":
+          description: Not found
+
+  /payment-clearance:
+    get:
+      operationId: listPaymentClearances
+      tags: [payment]
+      summary: List all payment clearances
+      responses:
+        "200":
+          description: List of payment clearances
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PaymentClearanceRecord"
+    post:
+      operationId: createPaymentClearance
+      tags: [payment]
+      summary: Generate a payment clearance - deducts from retailer credit and records vendor payment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreatePaymentClearanceBody"
+      responses:
+        "201":
+          description: Payment clearance created successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaymentClearanceResult"
+        "404":
+          description: Retailer or vendor not found
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                required: [error]
+
+components:
+  schemas:
+    HealthStatus:
+      type: object
+      properties:
+        status:
+          type: string
+      required:
+        - status
+
+    Retailer:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        phone:
+          type: string
+        creditLimit:
+          type: number
+        createdAt:
+          type: string
+      required:
+        - id
+        - name
+        - phone
+        - creditLimit
+        - createdAt
+
+    RetailerSummary:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        phone:
+          type: string
+        creditLimit:
+          type: number
+        outstanding:
+          type: number
+        lastPaymentDate:
+          type: ["string", "null"]
+        daysOverdue:
+          type: integer
+        isOverdue:
+          type: boolean
+        createdAt:
+          type: string
+      required:
+        - id
+        - name
+        - phone
+        - creditLimit
+        - outstanding
+        - lastPaymentDate
+        - daysOverdue
+        - isOverdue
+        - createdAt
+
+    CreateRetailerBody:
+      type: object
+      properties:
+        name:
+          type: string
+        phone:
+          type: string
+        creditLimit:
+          type: number
+      required:
+        - name
+        - phone
+        - creditLimit
+
+    UpdateRetailerBody:
+      type: object
+      properties:
+        name:
+          type: string
+        phone:
+          type: string
+        creditLimit:
+          type: number
+
+    LedgerEntry:
+      type: object
+      properties:
+        id:
+          type: integer
+        retailerId:
+          type: integer
+        type:
+          type: string
+          enum: [sale, payment]
+        amount:
+          type: number
+        note:
+          type: ["string", "null"]
+        date:
+          type: string
+        createdAt:
+          type: string
+      required:
+        - id
+        - retailerId
+        - type
+        - amount
+        - note
+        - date
+        - createdAt
+
+    CreateLedgerEntryBody:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [sale, payment]
+        amount:
+          type: number
+        note:
+          type: string
+        date:
+          type: string
+      required:
+        - type
+        - amount
+
+    RetailerAnalytics:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        phone:
+          type: string
+        totalPurchaseLast30Days:
+          type: number
+        totalPurchaseLast90Days:
+          type: number
+        avgOrderValue:
+          type: number
+        orderFrequency:
+          type: integer
+        lastOrderGap:
+          type: ["integer", "null"]
+        growthRate:
+          type: number
+        potentialScore:
+          type: number
+        isUnderBuying:
+          type: boolean
+      required:
+        - id
+        - name
+        - phone
+        - totalPurchaseLast30Days
+        - totalPurchaseLast90Days
+        - avgOrderValue
+        - orderFrequency
+        - lastOrderGap
+        - growthRate
+        - potentialScore
+        - isUnderBuying
+
+    Staff:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        commissionRate:
+          type: number
+        createdAt:
+          type: string
+      required:
+        - id
+        - name
+        - commissionRate
+        - createdAt
+
+    CreateStaffBody:
+      type: object
+      properties:
+        name:
+          type: string
+        commissionRate:
+          type: number
+      required:
+        - name
+        - commissionRate
+
+    StaffPerformance:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        commissionRate:
+          type: number
+        totalSales:
+          type: number
+        totalOrders:
+          type: integer
+        avgOrderValue:
+          type: number
+        commission:
+          type: number
+      required:
+        - id
+        - name
+        - commissionRate
+        - totalSales
+        - totalOrders
+        - avgOrderValue
+        - commission
+
+    Sale:
+      type: object
+      properties:
+        id:
+          type: integer
+        retailerId:
+          type: integer
+        staffId:
+          type: integer
+        amount:
+          type: number
+        date:
+          type: string
+        createdAt:
+          type: string
+      required:
+        - id
+        - retailerId
+        - staffId
+        - amount
+        - date
+        - createdAt
+
+    CreateSaleBody:
+      type: object
+      properties:
+        retailerId:
+          type: integer
+        staffId:
+          type: integer
+        amount:
+          type: number
+        date:
+          type: string
+      required:
+        - retailerId
+        - staffId
+        - amount
+
+    StockItem:
+      type: object
+      properties:
+        id:
+          type: integer
+        articleCode:
+          type: string
+        name:
+          type: string
+        price:
+          type: number
+        purchasePrice:
+          type: ["number", "null"]
+        currentStock:
+          type: integer
+        imageUrl:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+      required:
+        - id
+        - articleCode
+        - name
+        - price
+        - currentStock
+        - imageUrl
+        - createdAt
+
+    CreateStockItemBody:
+      type: object
+      properties:
+        articleCode:
+          type: string
+        name:
+          type: string
+        price:
+          type: number
+        purchasePrice:
+          type: number
+        currentStock:
+          type: integer
+        imageUrl:
+          type: string
+      required:
+        - articleCode
+        - name
+        - price
+        - currentStock
+
+    AnalyzeImageBody:
+      type: object
+      properties:
+        imageBase64:
+          type: string
+        imageUrl:
+          type: string
+        imageBase64s:
+          type: array
+          items:
+            type: string
+          description: Multiple base64 images for better recognition
+        imageUrls:
+          type: array
+          items:
+            type: string
+          description: Multiple image URLs for better recognition
+      required: []
+
+    ImageAnalysisResult:
+      type: object
+      properties:
+        predictedArticleCode:
+          type: string
+        confidence:
+          type: number
+        suggestedName:
+          type: string
+        suggestedPrice:
+          type: number
+        matchedProduct:
+          $ref: "#/components/schemas/StockItem"
+        allProducts:
+          type: array
+          items:
+            $ref: "#/components/schemas/StockItem"
+        imageUrls:
+          type: array
+          items:
+            type: string
+          description: All uploaded image URLs/base64 strings used for analysis
+      required:
+        - predictedArticleCode
+        - confidence
+        - allProducts
+
+    ConfirmStockBody:
+      type: object
+      properties:
+        productId:
+          type: integer
+        articleCode:
+          type: string
+        name:
+          type: string
+        price:
+          type: number
+        purchasePrice:
+          type: number
+        type:
+          type: string
+          enum: [in, out]
+        quantity:
+          type: integer
+        imageUrl:
+          type: ["string", "null"]
+        imageUrls:
+          type: array
+          items:
+            type: string
+          description: Multiple images to store for the product
+        supplierId:
+          type: integer
+        supplierName:
+          type: string
+      required:
+        - type
+        - quantity
+        - articleCode
+
+    AnalyzeSaleImageBody:
+      type: object
+      properties:
+        imageBase64:
+          type: string
+          description: Base64-encoded image containing multiple sold items
+      required:
+        - imageBase64
+
+    SaleDetectedItem:
+      type: object
+      properties:
+        articleCode:
+          type: string
+        quantity:
+          type: integer
+        confidence:
+          type: number
+        matchedProduct:
+          $ref: "#/components/schemas/StockItem"
+        notFound:
+          type: boolean
+          description: True if the article code was not found in inventory
+      required:
+        - articleCode
+        - quantity
+        - confidence
+
+    SaleAnalysisResult:
+      type: object
+      properties:
+        detectedItems:
+          type: array
+          items:
+            $ref: "#/components/schemas/SaleDetectedItem"
+        allProducts:
+          type: array
+          items:
+            $ref: "#/components/schemas/StockItem"
+        imageUrl:
+          type: string
+      required:
+        - detectedItems
+        - allProducts
+
+    ConfirmSaleBody:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              articleCode:
+                type: string
+              productId:
+                type: integer
+              quantity:
+                type: integer
+            required:
+              - articleCode
+              - quantity
+        imageUrl:
+          type: string
+      required:
+        - items
+
+    ConfirmSaleResult:
+      type: object
+      properties:
+        movements:
+          type: array
+          items:
+            $ref: "#/components/schemas/StockMovement"
+        totalItems:
+          type: integer
+        message:
+          type: string
+      required:
+        - movements
+        - totalItems
+        - message
+
+    ProductImage:
+      type: object
+      properties:
+        id:
+          type: integer
+        productId:
+          type: integer
+        imageUrl:
+          type: string
+        createdAt:
+          type: string
+      required:
+        - id
+        - productId
+        - imageUrl
+        - createdAt
+
+    StockMovement:
+      type: object
+      properties:
+        id:
+          type: integer
+        productId:
+          type: integer
+        productName:
+          type: string
+        articleCode:
+          type: string
+        type:
+          type: string
+          enum: [in, out]
+        quantity:
+          type: integer
+        imageUrl:
+          type: ["string", "null"]
+        date:
+          type: string
+        createdAt:
+          type: string
+      required:
+        - id
+        - productId
+        - productName
+        - articleCode
+        - type
+        - quantity
+        - imageUrl
+        - date
+        - createdAt
+
+    DashboardSummary:
+      type: object
+      properties:
+        totalOutstanding:
+          type: number
+        todaySales:
+          type: number
+        todayProfit:
+          type: number
+        totalProfit:
+          type: number
+        overdueRetailerCount:
+          type: integer
+        totalRetailers:
+          type: integer
+        totalStaff:
+          type: integer
+        totalProducts:
+          type: integer
+        lowStockCount:
+          type: integer
+      required:
+        - totalOutstanding
+        - todaySales
+        - todayProfit
+        - totalProfit
+        - overdueRetailerCount
+        - totalRetailers
+        - totalStaff
+        - totalProducts
+        - lowStockCount
+
+    ActivityItem:
+      type: object
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+          enum: [sale, payment, stock_in, stock_out, new_retailer, invoice]
+        description:
+          type: string
+        amount:
+          type: ["number", "null"]
+        date:
+          type: string
+        entityName:
+          type: string
+      required:
+        - id
+        - type
+        - description
+        - amount
+        - date
+        - entityName
+
+    InvoiceItem:
+      type: object
+      properties:
+        id:
+          type: integer
+        invoiceId:
+          type: integer
+        productId:
+          type: ["integer", "null"]
+        articleCode:
+          type: string
+        productName:
+          type: string
+        quantity:
+          type: integer
+        unitPrice:
+          type: number
+        totalPrice:
+          type: number
+      required:
+        - id
+        - invoiceId
+        - productId
+        - articleCode
+        - productName
+        - quantity
+        - unitPrice
+        - totalPrice
+
+    InvoiceWithItems:
+      type: object
+      properties:
+        id:
+          type: integer
+        invoiceNumber:
+          type: string
+        retailerId:
+          type: integer
+        retailerName:
+          type: string
+        staffId:
+          type: integer
+        staffName:
+          type: string
+        totalAmount:
+          type: number
+        status:
+          type: string
+          enum: [draft, confirmed, cancelled]
+        imageUrl:
+          type: ["string", "null"]
+        notes:
+          type: ["string", "null"]
+        date:
+          type: string
+        createdAt:
+          type: string
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/InvoiceItem"
+      required:
+        - id
+        - invoiceNumber
+        - retailerId
+        - retailerName
+        - staffId
+        - staffName
+        - totalAmount
+        - status
+        - imageUrl
+        - notes
+        - date
+        - createdAt
+        - items
+
+    CreateInvoiceItemInput:
+      type: object
+      properties:
+        productId:
+          type: integer
+        articleCode:
+          type: string
+        productName:
+          type: string
+        quantity:
+          type: integer
+        unitPrice:
+          type: number
+      required:
+        - articleCode
+        - productName
+        - quantity
+        - unitPrice
+
+    CreateInvoiceBody:
+      type: object
+      properties:
+        retailerId:
+          type: integer
+        staffId:
+          type: integer
+        invoiceNumber:
+          type: string
+        date:
+          type: string
+        notes:
+          type: string
+        imageUrl:
+          type: string
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/CreateInvoiceItemInput"
+      required:
+        - retailerId
+        - staffId
+        - invoiceNumber
+        - items
+
+    AnalyzeInvoiceImageBody:
+      type: object
+      properties:
+        imageBase64:
+          type: string
+        mimeType:
+          type: string
+      required:
+        - imageBase64
+
+    InvoiceAnalysisResult:
+      type: object
+      properties:
+        invoiceNumber:
+          type: ["string", "null"]
+        date:
+          type: ["string", "null"]
+        retailerName:
+          type: ["string", "null"]
+        totalAmount:
+          type: ["number", "null"]
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ExtractedInvoiceItem"
+        rawText:
+          type: string
+        confidence:
+          type: number
+      required:
+        - invoiceNumber
+        - date
+        - retailerName
+        - totalAmount
+        - items
+        - rawText
+        - confidence
+
+    ExtractedInvoiceItem:
+      type: object
+      properties:
+        articleCode:
+          type: ["string", "null"]
+        productName:
+          type: string
+        quantity:
+          type: integer
+        unitPrice:
+          type: ["number", "null"]
+        totalPrice:
+          type: ["number", "null"]
+      required:
+        - productName
+        - quantity
+        - articleCode
+        - unitPrice
+        - totalPrice
+
+    InvoiceConfirmResult:
+      type: object
+      properties:
+        invoice:
+          $ref: "#/components/schemas/InvoiceWithItems"
+        stockUpdates:
+          type: array
+          items:
+            type: object
+            properties:
+              articleCode:
+                type: string
+              productName:
+                type: string
+              quantityDeducted:
+                type: integer
+              newStock:
+                type: integer
+            required:
+              - articleCode
+              - productName
+              - quantityDeducted
+              - newStock
+        ledgerEntry:
+          $ref: "#/components/schemas/LedgerEntry"
+        saleRecord:
+          $ref: "#/components/schemas/Sale"
+        commissionEarned:
+          type: number
+      required:
+        - invoice
+        - stockUpdates
+        - ledgerEntry
+        - saleRecord
+        - commissionEarned
+
+    DailySalesEntry:
+      type: object
+      properties:
+        date:
+          type: string
+        totalAmount:
+          type: number
+        invoiceCount:
+          type: integer
+        topRetailer:
+          type: ["string", "null"]
+      required:
+        - date
+        - totalAmount
+        - invoiceCount
+        - topRetailer
+
+    Supplier:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        phone:
+          type: ["string", "null"]
+        address:
+          type: ["string", "null"]
+        gstin:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+      required:
+        - id
+        - name
+        - phone
+        - address
+        - gstin
+        - createdAt
+
+    SupplierSummary:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        phone:
+          type: ["string", "null"]
+        address:
+          type: ["string", "null"]
+        gstin:
+          type: ["string", "null"]
+        billCount:
+          type: integer
+        totalSpend:
+          type: number
+        lastBillDate:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+      required:
+        - id
+        - name
+        - phone
+        - address
+        - gstin
+        - billCount
+        - totalSpend
+        - lastBillDate
+        - createdAt
+
+    SupplierBillItem:
+      type: object
+      properties:
+        id:
+          type: integer
+        billId:
+          type: integer
+        productId:
+          type: ["integer", "null"]
+        articleCode:
+          type: string
+        productName:
+          type: string
+        quantity:
+          type: integer
+        unitPrice:
+          type: number
+        totalPrice:
+          type: number
+      required:
+        - id
+        - billId
+        - productId
+        - articleCode
+        - productName
+        - quantity
+        - unitPrice
+        - totalPrice
+
+    SupplierBillWithItems:
+      type: object
+      properties:
+        id:
+          type: integer
+        supplierId:
+          type: integer
+        supplierName:
+          type: string
+        billNumber:
+          type: string
+        billDate:
+          type: string
+        totalAmount:
+          type: number
+        status:
+          type: string
+        imageUrl:
+          type: ["string", "null"]
+        rawText:
+          type: ["string", "null"]
+        confidence:
+          type: ["number", "null"]
+        notes:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/SupplierBillItem"
+      required:
+        - id
+        - supplierId
+        - supplierName
+        - billNumber
+        - billDate
+        - totalAmount
+        - status
+        - imageUrl
+        - rawText
+        - confidence
+        - notes
+        - createdAt
+        - items
+
+    SupplierWithBills:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        phone:
+          type: ["string", "null"]
+        address:
+          type: ["string", "null"]
+        gstin:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+        bills:
+          type: array
+          items:
+            $ref: "#/components/schemas/SupplierBillWithItems"
+        stockImages:
+          type: array
+          items:
+            $ref: "#/components/schemas/SupplierStockImage"
+      required:
+        - id
+        - name
+        - phone
+        - address
+        - gstin
+        - createdAt
+        - bills
+        - stockImages
+
+    SupplierStockImage:
+      type: object
+      properties:
+        stockMovementId:
+          type: integer
+        productId:
+          type: integer
+        articleCode:
+          type: string
+        productName:
+          type: string
+        quantity:
+          type: integer
+        imageUrl:
+          type: ["string", "null"]
+        date:
+          type: string
+        billId:
+          type: ["integer", "null"]
+        billNumber:
+          type: ["string", "null"]
+      required:
+        - stockMovementId
+        - productId
+        - articleCode
+        - productName
+        - quantity
+        - imageUrl
+        - date
+        - billId
+        - billNumber
+
+    CreateSupplierBody:
+      type: object
+      properties:
+        name:
+          type: string
+        phone:
+          type: string
+        address:
+          type: string
+        gstin:
+          type: string
+      required:
+        - name
+
+    CreateSupplierBillBody:
+      type: object
+      properties:
+        billNumber:
+          type: string
+        billDate:
+          type: string
+        notes:
+          type: string
+        imageUrl:
+          type: string
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              articleCode:
+                type: string
+              productName:
+                type: string
+              quantity:
+                type: integer
+              unitPrice:
+                type: number
+              productId:
+                type: integer
+            required:
+              - articleCode
+              - productName
+              - quantity
+              - unitPrice
+      required:
+        - billNumber
+        - items
+
+    AnalyzeSupplierBillBody:
+      type: object
+      properties:
+        imageBase64:
+          type: string
+        mimeType:
+          type: string
+      required:
+        - imageBase64
+
+    SupplierBillAnalysisResult:
+      type: object
+      properties:
+        supplierName:
+          type: ["string", "null"]
+        billNumber:
+          type: ["string", "null"]
+        date:
+          type: ["string", "null"]
+        totalAmount:
+          type: ["number", "null"]
+        confidence:
+          type: number
+        rawText:
+          type: string
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ExtractedBillItem"
+      required:
+        - supplierName
+        - billNumber
+        - date
+        - totalAmount
+        - confidence
+        - rawText
+        - items
+
+    ExtractedBillItem:
+      type: object
+      properties:
+        articleCode:
+          type: ["string", "null"]
+        productName:
+          type: string
+        quantity:
+          type: integer
+        unitPrice:
+          type: ["number", "null"]
+        totalPrice:
+          type: ["number", "null"]
+      required:
+        - productName
+        - quantity
+        - articleCode
+        - unitPrice
+        - totalPrice
+
+    SupplierBillConfirmResult:
+      type: object
+      properties:
+        bill:
+          $ref: "#/components/schemas/SupplierBillWithItems"
+        stockUpdates:
+          type: array
+          items:
+            type: object
+            properties:
+              articleCode:
+                type: string
+              productName:
+                type: string
+              quantityAdded:
+                type: integer
+              newStock:
+                type: integer
+            required:
+              - articleCode
+              - productName
+              - quantityAdded
+              - newStock
+      required:
+        - bill
+        - stockUpdates
+
+    PaymentClearanceRecord:
+      type: object
+      properties:
+        id:
+          type: integer
+        amount:
+          type: number
+        notes:
+          type: ["string", "null"]
+        date:
+          type: string
+          format: date-time
+        retailerName:
+          type: ["string", "null"]
+        vendorName:
+          type: ["string", "null"]
+      required:
+        - id
+        - amount
+        - date
+
+    CreatePaymentClearanceBody:
+      type: object
+      properties:
+        amount:
+          type: number
+        retailerName:
+          type: string
+        vendorName:
+          type: string
+        notes:
+          type: string
+      required:
+        - amount
+        - retailerName
+        - vendorName
+
+    PaymentClearanceResult:
+      type: object
+      properties:
+        success:
+          type: boolean
+        retailer:
+          type: object
+          properties:
+            id:
+              type: integer
+            name:
+              type: string
+          required: [id, name]
+        vendor:
+          type: object
+          properties:
+            id:
+              type: integer
+            name:
+              type: string
+          required: [id, name]
+        amount:
+          type: number
+      required:
+        - success
+        - retailer
+        - vendor
+        - amount

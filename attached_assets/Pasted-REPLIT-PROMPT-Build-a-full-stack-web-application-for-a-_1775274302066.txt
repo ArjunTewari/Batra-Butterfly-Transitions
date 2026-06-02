@@ -1,0 +1,149 @@
+REPLIT PROMPT
+
+Build a full-stack web application for a footwear business operating system with the following requirements:
+
+TECH STACK
+Frontend: React (Vite or Next.js preferred)
+Backend: FastAPI (Python)
+Database: PostgreSQL (or SQLite for MVP)
+File storage: Local + option for cloud (S3-compatible)
+AI: Use placeholder API integration (Gemini/OpenAI style) for image analysis
+State management: React Context or Zustand
+UI Framework: Tailwind CSS
+UI/UX REQUIREMENTS
+Theme: Minimalist, premium
+Background: Pure black (#000000)
+Text: White (#FFFFFF) with gray accents (#A0A0A0)
+Font: Modern premium (Inter / SF Pro style)
+Smooth transitions (200–300ms ease-in-out)
+Rounded cards, subtle shadows, glassmorphism optional
+Fully responsive (mobile-first + desktop optimized)
+Sidebar navigation (collapsible)
+Clean dashboard layout
+CORE MODULES
+1. RETAILER CREDIT SYSTEM (Auto-refreshed every 24 hrs)
+Backend Logic:
+Tables:
+retailers (id, name, phone, credit_limit)
+ledger_entries (id, retailer_id, type [sale/payment], amount, date)
+Compute:
+outstanding = sum(sales) - sum(payments)
+last_payment_date
+days_overdue
+API:
+GET /retailers
+GET /retailer/{id}/ledger
+GET /retailer/{id}/summary
+Cron Job:
+Daily refresh (every 24 hrs):
+recompute all outstanding balances
+flag overdue retailers (> X days)
+Frontend:
+Retailer list with:
+outstanding
+credit limit
+overdue badge
+Retailer detail page:
+ledger timeline
+payment history
+charts (optional)
+2. TOP RETAILER ANALYSIS
+Backend Logic:
+
+For each retailer:
+
+total_purchase_last_30_days
+total_purchase_last_90_days
+avg_order_value
+order_frequency
+last_order_gap
+Derived Metrics:
+growth_rate = recent avg vs past avg
+potential_score = weighted score:
+(frequency + consistency + payment behavior)
+Flags:
+under_buying = current < historical avg
+high_potential = high past + recent drop
+API:
+GET /analytics/top-retailers
+GET /analytics/under-buying
+Frontend:
+Dashboard cards:
+Top 10 retailers
+Under-performing retailers
+Filters:
+time range
+category (future)
+3. STAFF PERFORMANCE SYSTEM
+Backend Logic:
+Tables:
+staff (id, name)
+sales (id, retailer_id, staff_id, amount, date)
+Metrics:
+total_sales
+total_orders
+avg_order_value
+commission (configurable %)
+API:
+GET /staff/performance
+GET /staff/{id}/details
+Frontend:
+Leaderboard UI
+Staff cards:
+sales
+commission
+Monthly filter
+4. AI-ASSISTED PHOTO STOCK MANAGEMENT
+Backend Logic:
+Tables:
+products (id, article_code, name, price, image_url)
+stock_movements (id, product_id, type [in/out], quantity, image_url, date)
+Flow:
+User uploads image
+Backend sends image to AI API
+AI returns:
+predicted_article_code
+confidence_score
+System matches with product DB
+User confirms
+Stock updated
+API:
+POST /stock/upload-image
+POST /stock/confirm
+GET /stock
+Important Logic:
+Do NOT auto-update stock without confirmation
+Store image + mapped SKU for future reuse (no repeat AI cost)
+Frontend:
+Upload UI
+Preview image
+Show AI suggestion
+Confirm / edit SKU + quantity
+Submit
+DASHBOARD (HOME SCREEN)
+
+Display:
+
+Total outstanding
+Today’s sales
+Top retailers
+Under-buying alerts
+Top staff
+Recent activity feed
+AUTOMATION READY (Future n8n integration)
+Expose endpoints for:
+bulk data upload
+daily sync trigger
+Design system to accept CSV/Excel ingestion
+PERFORMANCE REQUIREMENTS
+Fast load times
+Lazy loading for images
+Pagination for large data
+Efficient queries (index retailer_id, date)
+SECURITY
+Basic authentication (JWT)
+Role-based access (admin/staff)
+DELIVERABLE
+Fully functional MVP
+Clean modular code
+Ready for Replit deployment
