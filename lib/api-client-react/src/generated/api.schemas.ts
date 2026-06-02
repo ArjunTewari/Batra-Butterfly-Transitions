@@ -323,6 +323,11 @@ export interface InvoiceWithItems {
   staffId: number;
   staffName: string;
   totalAmount: number;
+  miscCharge: number;
+  claimCharge: number;
+  cashDeposit: number;
+  gstCharge: number;
+  packingCharge: number;
   status: InvoiceWithItemsStatus;
   /** @nullable */
   imageUrl: string | null;
@@ -348,6 +353,11 @@ export interface CreateInvoiceBody {
   date?: string;
   notes?: string;
   imageUrl?: string;
+  miscCharge?: number;
+  claimCharge?: number;
+  cashDeposit?: number;
+  gstCharge?: number;
+  packingCharge?: number;
   items: CreateInvoiceItemInput[];
 }
 
@@ -594,11 +604,161 @@ export interface PaymentClearanceResult {
   amount: number;
 }
 
+export interface AttendanceStatusEntry {
+  staffId: number;
+  staffName: string;
+  enrolled: boolean;
+  /** @nullable */
+  status: string | null;
+  /** @nullable */
+  checkInTime?: string | null;
+  /** @nullable */
+  method?: string | null;
+}
+
+export interface StaffAttendanceRecord {
+  id: number;
+  staffId: number;
+  staffName: string;
+  date: string;
+  status: string;
+  /** @nullable */
+  checkInTime?: string | null;
+  method: string;
+  /** @nullable */
+  note?: string | null;
+}
+
+export interface FaceScanBody {
+  descriptor: number[];
+}
+
+export interface FaceScanResult {
+  matched: boolean;
+  /** @nullable */
+  staffId?: number | null;
+  /** @nullable */
+  staffName?: string | null;
+  /** @nullable */
+  distance?: number | null;
+  attendance?: StaffAttendanceRecord;
+  alreadyMarked: boolean;
+}
+
+export interface FaceEnrollBody {
+  descriptor: number[];
+  photoUrl?: string;
+}
+
+export type MarkAttendanceBodyStatus =
+  (typeof MarkAttendanceBodyStatus)[keyof typeof MarkAttendanceBodyStatus];
+
+export const MarkAttendanceBodyStatus = {
+  present: "present",
+  half_day: "half_day",
+  absent: "absent",
+} as const;
+
+export interface MarkAttendanceBody {
+  staffId: number;
+  date?: string;
+  status: MarkAttendanceBodyStatus;
+}
+
+export type AttendanceSummaryDaysItem = {
+  date: string;
+  status: string;
+  /** @nullable */
+  checkInTime?: string | null;
+};
+
+export interface AttendanceSummary {
+  staffId: number;
+  staffName: string;
+  month: number;
+  year: number;
+  present: number;
+  halfDay: number;
+  absent: number;
+  totalMarked: number;
+  days: AttendanceSummaryDaysItem[];
+}
+
+export interface StaffLoan {
+  id: number;
+  staffId: number;
+  amount: number;
+  /** @nullable */
+  note?: string | null;
+  status: string;
+  date: string;
+}
+
+export interface CreateStaffLoanBody {
+  staffId: number;
+  amount: number;
+  note?: string;
+}
+
+export interface StaffPayment {
+  id: number;
+  staffId: number;
+  staffName: string;
+  amount: number;
+  /** @nullable */
+  note?: string | null;
+  status: string;
+  date: string;
+  /** @nullable */
+  approvedAt?: string | null;
+}
+
+export interface CreateStaffPaymentBody {
+  staffId: number;
+  amount: number;
+  note?: string;
+}
+
+export interface SalaryOverview {
+  staffId: number;
+  staffName: string;
+  month: number;
+  year: number;
+  earnings: number;
+  deductions: number;
+  paymentsApproved: number;
+  paymentsPending: number;
+  netPayable: number;
+  presentDays: number;
+  halfDays: number;
+  payableDays: number;
+  loanOutstanding: number;
+  totalItems: number;
+}
+
 export type GetTopRetailersParams = {
   days?: number;
 };
 
 export type GetStaffPerformanceParams = {
+  month?: number;
+  year?: number;
+};
+
+export type GetAttendanceParams = {
+  date?: string;
+};
+
+export type ListStaffPaymentsParams = {
+  status?: string;
+};
+
+export type GetStaffAttendanceSummaryParams = {
+  month?: number;
+  year?: number;
+};
+
+export type GetStaffSalaryParams = {
   month?: number;
   year?: number;
 };

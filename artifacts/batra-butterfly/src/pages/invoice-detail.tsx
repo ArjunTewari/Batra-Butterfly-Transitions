@@ -24,7 +24,6 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { formatCurrency } from "@/lib/utils";
-import { useAuth } from "@/contexts/AuthContext";
 
 function StatusBadge({ status }: { status: string }) {
   const colors: Record<string, string> = {
@@ -51,7 +50,6 @@ export default function InvoiceDetail() {
     query: { queryKey: ["invoices", invoiceId], enabled: !!invoiceId },
   });
 
-  const { isMaster } = useAuth();
   const confirmInvoice = useConfirmInvoice();
   const deleteInvoice = useDeleteInvoice();
 
@@ -108,6 +106,17 @@ export default function InvoiceDetail() {
       </div>
     );
   }
+
+  const itemsSubtotal = invoice.items.reduce((sum, it) => sum + it.totalPrice, 0);
+  const chargeRows = (
+    [
+      { label: "Misc", amount: invoice.miscCharge ?? 0 },
+      { label: "Claim", amount: invoice.claimCharge ?? 0 },
+      { label: "Cash Deposit", amount: invoice.cashDeposit ?? 0 },
+      { label: "GST", amount: invoice.gstCharge ?? 0 },
+      { label: "Packing", amount: invoice.packingCharge ?? 0 },
+    ] as const
+  ).filter((c) => c.amount > 0);
 
   return (
     <div className="space-y-6 max-w-3xl">
@@ -195,8 +204,24 @@ export default function InvoiceDetail() {
                   <p className="text-sm font-semibold text-right text-white">{formatCurrency(item.totalPrice)}</p>
                 </div>
               ))}
+              {chargeRows.length > 0 && (
+                <div className="mt-3 pt-3 border-t border-white/10 space-y-1.5">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-400">Sub Total</span>
+                    <span className="text-gray-300">{formatCurrency(itemsSubtotal)}</span>
+                  </div>
+                  {chargeRows.map((c) => (
+                    <div key={c.label} className="flex justify-between text-sm">
+                      <span className="text-gray-400">{c.label}</span>
+                      <span className="text-gray-300">{formatCurrency(c.amount)}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
               <div className="grid grid-cols-[1fr_80px_100px_100px] gap-4 pt-3 px-1">
-                <div className="col-span-3 text-right text-sm text-gray-400">Total</div>
+                <div className="col-span-3 text-right text-sm text-gray-400">
+                  {chargeRows.length > 0 ? "Grand Total" : "Total"}
+                </div>
                 <div className="text-right text-xl font-bold text-white">{formatCurrency(invoice.totalAmount)}</div>
               </div>
             </div>
@@ -249,24 +274,17 @@ export default function InvoiceDetail() {
           >
             <Trash2 className="h-4 w-4 mr-2" /> Delete Draft
           </Button>
-          {isMaster ? (
-            <Button
-              className="flex-1 bg-white text-black hover:bg-gray-200 font-semibold py-5"
-              onClick={handleConfirm}
-              disabled={confirmInvoice.isPending}
-            >
-              {confirmInvoice.isPending ? (
-                <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Confirming...</>
-              ) : (
-                <><CheckCircle2 className="h-4 w-4 mr-2" /> Confirm Invoice</>
-              )}
-            </Button>
-          ) : (
-            <div className="flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-md bg-yellow-500/10 border border-yellow-500/20">
-              <span className="text-yellow-400 text-sm font-medium">📨 Sent for Approval</span>
-              <span className="text-gray-500 text-xs">(Master only)</span>
-            </div>
-          )}
+          <Button
+            className="flex-1 bg-white text-black hover:bg-gray-200 font-semibold py-5"
+            onClick={handleConfirm}
+            disabled={confirmInvoice.isPending}
+          >
+            {confirmInvoice.isPending ? (
+              <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Confirming...</>
+            ) : (
+              <><CheckCircle2 className="h-4 w-4 mr-2" /> Confirm Invoice</>
+            )}
+          </Button>
         </motion.div>
       )}
 

@@ -16,7 +16,7 @@ import { trackAiUsage } from "../lib/trackAiUsage";
 
 const router: IRouter = Router();
 
-async function getInvoiceWithItems(invoiceId: number) {
+async function getInvoiceWithItems(invoiceId: number, accountId: number) {
   const [invoice] = await db
     .select({
       id: invoicesTable.id,
@@ -26,6 +26,11 @@ async function getInvoiceWithItems(invoiceId: number) {
       staffId: invoicesTable.staffId,
       staffName: staffTable.name,
       totalAmount: invoicesTable.totalAmount,
+      miscCharge: invoicesTable.miscCharge,
+      claimCharge: invoicesTable.claimCharge,
+      cashDeposit: invoicesTable.cashDeposit,
+      gstCharge: invoicesTable.gstCharge,
+      packingCharge: invoicesTable.packingCharge,
       status: invoicesTable.status,
       imageUrl: invoicesTable.imageUrl,
       notes: invoicesTable.notes,
@@ -35,7 +40,7 @@ async function getInvoiceWithItems(invoiceId: number) {
     .from(invoicesTable)
     .innerJoin(retailersTable, eq(invoicesTable.retailerId, retailersTable.id))
     .innerJoin(staffTable, eq(invoicesTable.staffId, staffTable.id))
-    .where(eq(invoicesTable.id, invoiceId));
+    .where(and(eq(invoicesTable.id, invoiceId), eq(invoicesTable.accountId, accountId)));
 
   if (!invoice) return null;
 
@@ -44,6 +49,11 @@ async function getInvoiceWithItems(invoiceId: number) {
   return {
     ...invoice,
     totalAmount: parseFloat(invoice.totalAmount),
+    miscCharge: parseFloat(invoice.miscCharge),
+    claimCharge: parseFloat(invoice.claimCharge),
+    cashDeposit: parseFloat(invoice.cashDeposit),
+    gstCharge: parseFloat(invoice.gstCharge),
+    packingCharge: parseFloat(invoice.packingCharge),
     date: invoice.date.toISOString(),
     createdAt: invoice.createdAt.toISOString(),
     items: items.map((item) => ({
@@ -72,6 +82,11 @@ router.get("/invoices", requireAuth, async (req, res): Promise<void> => {
       staffId: invoicesTable.staffId,
       staffName: staffTable.name,
       totalAmount: invoicesTable.totalAmount,
+      miscCharge: invoicesTable.miscCharge,
+      claimCharge: invoicesTable.claimCharge,
+      cashDeposit: invoicesTable.cashDeposit,
+      gstCharge: invoicesTable.gstCharge,
+      packingCharge: invoicesTable.packingCharge,
       status: invoicesTable.status,
       imageUrl: invoicesTable.imageUrl,
       notes: invoicesTable.notes,
@@ -99,6 +114,11 @@ router.get("/invoices", requireAuth, async (req, res): Promise<void> => {
       return {
         ...inv,
         totalAmount: parseFloat(inv.totalAmount),
+        miscCharge: parseFloat(inv.miscCharge),
+        claimCharge: parseFloat(inv.claimCharge),
+        cashDeposit: parseFloat(inv.cashDeposit),
+        gstCharge: parseFloat(inv.gstCharge),
+        packingCharge: parseFloat(inv.packingCharge),
         date: inv.date.toISOString(),
         createdAt: inv.createdAt.toISOString(),
         items: items.map((item) => ({
@@ -210,7 +230,7 @@ router.get("/invoices/:id", requireAuth, async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const params = GetInvoiceParams.safeParse({ id: parseInt(raw, 10) });
   if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
-  const invoice = await getInvoiceWithItems(params.data.id);
+  const invoice = await getInvoiceWithItems(params.data.id, req.session.accountId!);
   if (!invoice) { res.status(404).json({ error: "Invoice not found" }); return; }
   res.json(invoice);
 });
@@ -221,7 +241,19 @@ router.post("/invoices", requireAuth, async (req, res): Promise<void> => {
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
 
   const { retailerId, staffId, invoiceNumber, date, notes, imageUrl, items } = parsed.data;
-  const totalAmount = items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
+
+  const [ownedRetailer] = await db.select({ id: retailersTable.id }).from(retailersTable).where(and(eq(retailersTable.id, retailerId), eq(retailersTable.accountId, accountId)));
+  if (!ownedRetailer) { res.status(404).json({ error: "Retailer not found" }); return; }
+  const [ownedStaff] = await db.select({ id: staffTable.id }).from(staffTable).where(and(eq(staffTable.id, staffId), eq(staffTable.accountId, accountId)));
+  if (!ownedStaff) { res.status(404).json({ error: "Staff not found" }); return; }
+
+  const miscCharge = parsed.data.miscCharge ?? 0;
+  const claimCharge = parsed.data.claimCharge ?? 0;
+  const cashDeposit = parsed.data.cashDeposit ?? 0;
+  const gstCharge = parsed.data.gstCharge ?? 0;
+  const packingCharge = parsed.data.packingCharge ?? 0;
+  const itemsTotal = items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
+  const totalAmount = itemsTotal + miscCharge + claimCharge + cashDeposit + gstCharge + packingCharge;
 
   const [invoice] = await db.insert(invoicesTable).values({
     accountId,
@@ -229,6 +261,11 @@ router.post("/invoices", requireAuth, async (req, res): Promise<void> => {
     retailerId,
     staffId,
     totalAmount: String(totalAmount),
+    miscCharge: String(miscCharge),
+    claimCharge: String(claimCharge),
+    cashDeposit: String(cashDeposit),
+    gstCharge: String(gstCharge),
+    packingCharge: String(packingCharge),
     status: "draft",
     imageUrl: imageUrl ?? null,
     notes: notes ?? null,
@@ -252,7 +289,7 @@ router.post("/invoices", requireAuth, async (req, res): Promise<void> => {
     });
   }
 
-  const result = await getInvoiceWithItems(invoice.id);
+  const result = await getInvoiceWithItems(invoice.id, accountId);
 
   const [retailer] = await db.select({ name: retailersTable.name, phone: retailersTable.phone }).from(retailersTable).where(eq(retailersTable.id, retailerId));
   if (retailer) {
@@ -275,16 +312,12 @@ router.delete("/invoices/:id", requireAuth, async (req, res): Promise<void> => {
 });
 
 router.post("/invoices/:id/confirm", requireAuth, async (req, res): Promise<void> => {
-  if (req.session.role !== "master") {
-    res.status(403).json({ error: "Only the master account can confirm invoices" });
-    return;
-  }
   const accountId = req.session.accountId!;
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const params = ConfirmInvoiceParams.safeParse({ id: parseInt(raw, 10) });
   if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
 
-  const invoice = await getInvoiceWithItems(params.data.id);
+  const invoice = await getInvoiceWithItems(params.data.id, accountId);
   if (!invoice) { res.status(404).json({ error: "Invoice not found" }); return; }
   if (invoice.status === "confirmed") { res.status(400).json({ error: "Invoice already confirmed" }); return; }
 
@@ -322,12 +355,11 @@ router.post("/invoices/:id/confirm", requireAuth, async (req, res): Promise<void
 
   await db.update(invoicesTable).set({ status: "confirmed" }).where(eq(invoicesTable.id, params.data.id));
 
-  const [staff] = await db.select().from(staffTable).where(eq(staffTable.id, invoice.staffId));
-  const commissionRate = staff ? parseFloat(staff.commissionRate) : 5;
-  const commissionEarned = invoice.totalAmount * (commissionRate / 100);
+  // Flat ₹1 per invoice line item, regardless of quantity or sale value.
+  const commissionEarned = invoice.items.length;
 
   res.json({
-    invoice: await getInvoiceWithItems(params.data.id),
+    invoice: await getInvoiceWithItems(params.data.id, accountId),
     stockUpdates,
     ledgerEntry: { id: ledgerEntry.id, retailerId: ledgerEntry.retailerId, type: ledgerEntry.type, amount: parseFloat(ledgerEntry.amount), note: ledgerEntry.note ?? null, date: ledgerEntry.date.toISOString(), createdAt: ledgerEntry.createdAt.toISOString() },
     saleRecord: { id: saleRecord.id, retailerId: saleRecord.retailerId, staffId: saleRecord.staffId, amount: parseFloat(saleRecord.amount), date: saleRecord.date.toISOString(), createdAt: saleRecord.createdAt.toISOString() },

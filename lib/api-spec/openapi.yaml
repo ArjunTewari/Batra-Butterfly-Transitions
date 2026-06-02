@@ -313,6 +313,283 @@ paths:
               schema:
                 $ref: "#/components/schemas/Sale"
 
+  /staff/attendance:
+    get:
+      operationId: getAttendance
+      tags: [staff]
+      summary: Get attendance for all staff on a date
+      parameters:
+        - name: date
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Attendance status per staff
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AttendanceStatusEntry"
+
+  /staff/attendance/face-scan:
+    post:
+      operationId: faceScanAttendance
+      tags: [staff]
+      summary: Mark attendance by matching a scanned face descriptor
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FaceScanBody"
+      responses:
+        "200":
+          description: Face scan result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FaceScanResult"
+
+  /staff/attendance/mark:
+    post:
+      operationId: markAttendance
+      tags: [staff]
+      summary: Manually mark attendance for a staff member
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MarkAttendanceBody"
+      responses:
+        "200":
+          description: Attendance record
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StaffAttendanceRecord"
+
+  /staff/loans:
+    post:
+      operationId: createStaffLoan
+      tags: [staff]
+      summary: Record a loan/advance for a staff member
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateStaffLoanBody"
+      responses:
+        "201":
+          description: Created loan
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StaffLoan"
+
+  /staff/loans/{id}/clear:
+    post:
+      operationId: clearStaffLoan
+      tags: [staff]
+      summary: Mark a staff loan as cleared
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Updated loan
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StaffLoan"
+
+  /staff/payments:
+    get:
+      operationId: listStaffPayments
+      tags: [staff]
+      summary: List staff payment clearance requests
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Staff payments
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/StaffPayment"
+    post:
+      operationId: createStaffPayment
+      tags: [staff]
+      summary: Request a staff payment clearance (pending master approval)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateStaffPaymentBody"
+      responses:
+        "201":
+          description: Created payment request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StaffPayment"
+
+  /staff/payments/{id}/approve:
+    post:
+      operationId: approveStaffPayment
+      tags: [staff]
+      summary: Approve a staff payment (master only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Approved payment
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StaffPayment"
+
+  /staff/payments/{id}/reject:
+    post:
+      operationId: rejectStaffPayment
+      tags: [staff]
+      summary: Reject a staff payment (master only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Rejected payment
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StaffPayment"
+
+  /staff/{id}/face-enroll:
+    post:
+      operationId: enrollStaffFace
+      tags: [staff]
+      summary: Enroll or update a staff member's face descriptor
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FaceEnrollBody"
+      responses:
+        "200":
+          description: Updated staff
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Staff"
+
+  /staff/{id}/attendance-summary:
+    get:
+      operationId: getStaffAttendanceSummary
+      tags: [staff]
+      summary: Monthly attendance summary for a staff member
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: month
+          in: query
+          required: false
+          schema:
+            type: integer
+        - name: year
+          in: query
+          required: false
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Attendance summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AttendanceSummary"
+
+  /staff/{id}/loans:
+    get:
+      operationId: listStaffLoans
+      tags: [staff]
+      summary: List loans for a staff member
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Loans
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/StaffLoan"
+
+  /staff/{id}/salary:
+    get:
+      operationId: getStaffSalary
+      tags: [staff]
+      summary: Salary overview for a staff member
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: month
+          in: query
+          required: false
+          schema:
+            type: integer
+        - name: year
+          in: query
+          required: false
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Salary overview
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SalaryOverview"
+
   /stock:
     get:
       operationId: listStock
@@ -1486,6 +1763,16 @@ components:
           type: string
         totalAmount:
           type: number
+        miscCharge:
+          type: number
+        claimCharge:
+          type: number
+        cashDeposit:
+          type: number
+        gstCharge:
+          type: number
+        packingCharge:
+          type: number
         status:
           type: string
           enum: [draft, confirmed, cancelled]
@@ -1509,6 +1796,11 @@ components:
         - staffId
         - staffName
         - totalAmount
+        - miscCharge
+        - claimCharge
+        - cashDeposit
+        - gstCharge
+        - packingCharge
         - status
         - imageUrl
         - notes
@@ -1550,6 +1842,16 @@ components:
           type: string
         imageUrl:
           type: string
+        miscCharge:
+          type: number
+        claimCharge:
+          type: number
+        cashDeposit:
+          type: number
+        gstCharge:
+          type: number
+        packingCharge:
+          type: number
         items:
           type: array
           items:
@@ -2065,3 +2367,272 @@ components:
         - retailer
         - vendor
         - amount
+
+    AttendanceStatusEntry:
+      type: object
+      properties:
+        staffId:
+          type: integer
+        staffName:
+          type: string
+        enrolled:
+          type: boolean
+        status:
+          type: ["string", "null"]
+        checkInTime:
+          type: ["string", "null"]
+        method:
+          type: ["string", "null"]
+      required:
+        - staffId
+        - staffName
+        - enrolled
+        - status
+
+    StaffAttendanceRecord:
+      type: object
+      properties:
+        id:
+          type: integer
+        staffId:
+          type: integer
+        staffName:
+          type: string
+        date:
+          type: string
+        status:
+          type: string
+        checkInTime:
+          type: ["string", "null"]
+        method:
+          type: string
+        note:
+          type: ["string", "null"]
+      required:
+        - id
+        - staffId
+        - staffName
+        - date
+        - status
+        - method
+
+    FaceScanBody:
+      type: object
+      properties:
+        descriptor:
+          type: array
+          items:
+            type: number
+      required:
+        - descriptor
+
+    FaceScanResult:
+      type: object
+      properties:
+        matched:
+          type: boolean
+        staffId:
+          type: ["integer", "null"]
+        staffName:
+          type: ["string", "null"]
+        distance:
+          type: ["number", "null"]
+        attendance:
+          $ref: "#/components/schemas/StaffAttendanceRecord"
+        alreadyMarked:
+          type: boolean
+      required:
+        - matched
+        - alreadyMarked
+
+    FaceEnrollBody:
+      type: object
+      properties:
+        descriptor:
+          type: array
+          items:
+            type: number
+        photoUrl:
+          type: string
+      required:
+        - descriptor
+
+    MarkAttendanceBody:
+      type: object
+      properties:
+        staffId:
+          type: integer
+        date:
+          type: string
+        status:
+          type: string
+          enum: [present, half_day, absent]
+      required:
+        - staffId
+        - status
+
+    AttendanceSummary:
+      type: object
+      properties:
+        staffId:
+          type: integer
+        staffName:
+          type: string
+        month:
+          type: integer
+        year:
+          type: integer
+        present:
+          type: integer
+        halfDay:
+          type: integer
+        absent:
+          type: integer
+        totalMarked:
+          type: integer
+        days:
+          type: array
+          items:
+            type: object
+            properties:
+              date:
+                type: string
+              status:
+                type: string
+              checkInTime:
+                type: ["string", "null"]
+            required:
+              - date
+              - status
+      required:
+        - staffId
+        - staffName
+        - month
+        - year
+        - present
+        - halfDay
+        - absent
+        - totalMarked
+        - days
+
+    StaffLoan:
+      type: object
+      properties:
+        id:
+          type: integer
+        staffId:
+          type: integer
+        amount:
+          type: number
+        note:
+          type: ["string", "null"]
+        status:
+          type: string
+        date:
+          type: string
+      required:
+        - id
+        - staffId
+        - amount
+        - status
+        - date
+
+    CreateStaffLoanBody:
+      type: object
+      properties:
+        staffId:
+          type: integer
+        amount:
+          type: number
+        note:
+          type: string
+      required:
+        - staffId
+        - amount
+
+    StaffPayment:
+      type: object
+      properties:
+        id:
+          type: integer
+        staffId:
+          type: integer
+        staffName:
+          type: string
+        amount:
+          type: number
+        note:
+          type: ["string", "null"]
+        status:
+          type: string
+        date:
+          type: string
+        approvedAt:
+          type: ["string", "null"]
+      required:
+        - id
+        - staffId
+        - staffName
+        - amount
+        - status
+        - date
+
+    CreateStaffPaymentBody:
+      type: object
+      properties:
+        staffId:
+          type: integer
+        amount:
+          type: number
+        note:
+          type: string
+      required:
+        - staffId
+        - amount
+
+    SalaryOverview:
+      type: object
+      properties:
+        staffId:
+          type: integer
+        staffName:
+          type: string
+        month:
+          type: integer
+        year:
+          type: integer
+        earnings:
+          type: number
+        deductions:
+          type: number
+        paymentsApproved:
+          type: number
+        paymentsPending:
+          type: number
+        netPayable:
+          type: number
+        presentDays:
+          type: integer
+        halfDays:
+          type: integer
+        payableDays:
+          type: number
+        loanOutstanding:
+          type: number
+        totalItems:
+          type: integer
+      required:
+        - staffId
+        - staffName
+        - month
+        - year
+        - earnings
+        - deductions
+        - paymentsApproved
+        - paymentsPending
+        - netPayable
+        - presentDays
+        - halfDays
+        - payableDays
+        - loanOutstanding
+        - totalItems

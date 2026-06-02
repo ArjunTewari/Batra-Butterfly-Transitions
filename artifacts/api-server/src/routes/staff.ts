@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
-import { eq, and } from "drizzle-orm";
-import { db, staffTable, salesTable } from "@workspace/db";
+import { eq, and, inArray, count } from "drizzle-orm";
+import { db, staffTable, salesTable, invoicesTable, invoiceItemsTable } from "@workspace/db";
 import {
   CreateStaffBody,
   GetStaffPerformanceQueryParams,
@@ -11,14 +11,38 @@ import { requireAuth } from "../middleware/requireAuth";
 
 const router: IRouter = Router();
 
+// Commission is a flat ₹1 per invoice line item across the staff member's
+// confirmed invoices (not a percentage of sales value).
 async function computeStaffPerformance(
-  staff: { id: number; name: string; commissionRate: string; createdAt: Date },
-  sales: { amount: string }[]
+  staff: { id: number; name: string; commissionRate: string },
+  accountId: number,
+  month?: number,
+  year?: number
 ) {
-  const totalSales = sales.reduce((s, e) => s + parseFloat(e.amount), 0);
-  const totalOrders = sales.length;
+  const invoices = await db
+    .select({ id: invoicesTable.id, totalAmount: invoicesTable.totalAmount, date: invoicesTable.date })
+    .from(invoicesTable)
+    .where(and(eq(invoicesTable.accountId, accountId), eq(invoicesTable.staffId, staff.id), eq(invoicesTable.status, "confirmed")));
+
+  const filtered = invoices.filter((inv) => {
+    if (month && inv.date.getMonth() + 1 !== month) return false;
+    if (year && inv.date.getFullYear() !== year) return false;
+    return true;
+  });
+
+  const totalSales = filtered.reduce((s, e) => s + parseFloat(e.totalAmount), 0);
+  const totalOrders = filtered.length;
   const avgOrderValue = totalOrders > 0 ? totalSales / totalOrders : 0;
-  const commission = totalSales * (parseFloat(staff.commissionRate) / 100);
+
+  let commission = 0;
+  if (filtered.length > 0) {
+    const [row] = await db
+      .select({ c: count() })
+      .from(invoiceItemsTable)
+      .where(inArray(invoiceItemsTable.invoiceId, filtered.map((i) => i.id)));
+    commission = Number(row?.c ?? 0);
+  }
+
   return {
     id: staff.id,
     name: staff.name,
@@ -66,20 +90,10 @@ router.get("/staff/performance", requireAuth, async (req, res): Promise<void> =>
   const qParams = GetStaffPerformanceQueryParams.safeParse(req.query);
   const staffList = await db.select().from(staffTable).where(eq(staffTable.accountId, accountId));
 
+  const month = qParams.success ? qParams.data.month : undefined;
+  const year = qParams.success ? qParams.data.year : undefined;
   const results = await Promise.all(
-    staffList.map(async (s) => {
-      const sales = await db.select().from(salesTable).where(and(eq(salesTable.staffId, s.id), eq(salesTable.accountId, accountId)));
-      let filteredSales = sales;
-      if (qParams.success && (qParams.data.month || qParams.data.year)) {
-        filteredSales = sales.filter((sale) => {
-          const d = sale.date;
-          if (qParams.data.month && d.getMonth() + 1 !== qParams.data.month) return false;
-          if (qParams.data.year && d.getFullYear() !== qParams.data.year) return false;
-          return true;
-        });
-      }
-      return computeStaffPerformance(s, filteredSales);
-    })
+    staffList.map((s) => computeStaffPerformance(s, accountId, month, year))
   );
 
   res.json(results.sort((a, b) => b.totalSales - a.totalSales));
@@ -98,8 +112,7 @@ router.get("/staff/:id", requireAuth, async (req, res): Promise<void> => {
     res.status(404).json({ error: "Staff not found" });
     return;
   }
-  const sales = await db.select().from(salesTable).where(and(eq(salesTable.staffId, params.data.id), eq(salesTable.accountId, accountId)));
-  res.json(await computeStaffPerformance(staff, sales));
+  res.json(await computeStaffPerformance(staff, accountId));
 });
 
 router.post("/sales", requireAuth, async (req, res): Promise<void> => {

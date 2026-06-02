@@ -1,4 +1,4 @@
-import { pgTable, serial, text, numeric, integer, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, numeric, integer, timestamp, jsonb } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { accountsTable } from "./accounts";
@@ -9,6 +9,8 @@ export const staffTable = pgTable("staff", {
   name: text("name").notNull(),
   commissionRate: numeric("commission_rate", { precision: 5, scale: 2 }).notNull().default("5"),
   pin: text("pin"),
+  faceDescriptor: jsonb("face_descriptor").$type<number[]>(),
+  facePhotoUrl: text("face_photo_url"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });

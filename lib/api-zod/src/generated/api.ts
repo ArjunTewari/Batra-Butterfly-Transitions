@@ -233,6 +233,256 @@ export const CreateSaleBody = zod.object({
 });
 
 /**
+ * @summary Get attendance for all staff on a date
+ */
+export const GetAttendanceQueryParams = zod.object({
+  date: zod.coerce.string().optional(),
+});
+
+export const GetAttendanceResponseItem = zod.object({
+  staffId: zod.number(),
+  staffName: zod.string(),
+  enrolled: zod.boolean(),
+  status: zod.string().nullable(),
+  checkInTime: zod.string().nullish(),
+  method: zod.string().nullish(),
+});
+export const GetAttendanceResponse = zod.array(GetAttendanceResponseItem);
+
+/**
+ * @summary Mark attendance by matching a scanned face descriptor
+ */
+export const FaceScanAttendanceBody = zod.object({
+  descriptor: zod.array(zod.number()),
+});
+
+export const FaceScanAttendanceResponse = zod.object({
+  matched: zod.boolean(),
+  staffId: zod.number().nullish(),
+  staffName: zod.string().nullish(),
+  distance: zod.number().nullish(),
+  attendance: zod
+    .object({
+      id: zod.number(),
+      staffId: zod.number(),
+      staffName: zod.string(),
+      date: zod.string(),
+      status: zod.string(),
+      checkInTime: zod.string().nullish(),
+      method: zod.string(),
+      note: zod.string().nullish(),
+    })
+    .optional(),
+  alreadyMarked: zod.boolean(),
+});
+
+/**
+ * @summary Manually mark attendance for a staff member
+ */
+export const MarkAttendanceBody = zod.object({
+  staffId: zod.number(),
+  date: zod.string().optional(),
+  status: zod.enum(["present", "half_day", "absent"]),
+});
+
+export const MarkAttendanceResponse = zod.object({
+  id: zod.number(),
+  staffId: zod.number(),
+  staffName: zod.string(),
+  date: zod.string(),
+  status: zod.string(),
+  checkInTime: zod.string().nullish(),
+  method: zod.string(),
+  note: zod.string().nullish(),
+});
+
+/**
+ * @summary Record a loan/advance for a staff member
+ */
+export const CreateStaffLoanBody = zod.object({
+  staffId: zod.number(),
+  amount: zod.number(),
+  note: zod.string().optional(),
+});
+
+/**
+ * @summary Mark a staff loan as cleared
+ */
+export const ClearStaffLoanParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const ClearStaffLoanResponse = zod.object({
+  id: zod.number(),
+  staffId: zod.number(),
+  amount: zod.number(),
+  note: zod.string().nullish(),
+  status: zod.string(),
+  date: zod.string(),
+});
+
+/**
+ * @summary List staff payment clearance requests
+ */
+export const ListStaffPaymentsQueryParams = zod.object({
+  status: zod.coerce.string().optional(),
+});
+
+export const ListStaffPaymentsResponseItem = zod.object({
+  id: zod.number(),
+  staffId: zod.number(),
+  staffName: zod.string(),
+  amount: zod.number(),
+  note: zod.string().nullish(),
+  status: zod.string(),
+  date: zod.string(),
+  approvedAt: zod.string().nullish(),
+});
+export const ListStaffPaymentsResponse = zod.array(
+  ListStaffPaymentsResponseItem,
+);
+
+/**
+ * @summary Request a staff payment clearance (pending master approval)
+ */
+export const CreateStaffPaymentBody = zod.object({
+  staffId: zod.number(),
+  amount: zod.number(),
+  note: zod.string().optional(),
+});
+
+/**
+ * @summary Approve a staff payment (master only)
+ */
+export const ApproveStaffPaymentParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const ApproveStaffPaymentResponse = zod.object({
+  id: zod.number(),
+  staffId: zod.number(),
+  staffName: zod.string(),
+  amount: zod.number(),
+  note: zod.string().nullish(),
+  status: zod.string(),
+  date: zod.string(),
+  approvedAt: zod.string().nullish(),
+});
+
+/**
+ * @summary Reject a staff payment (master only)
+ */
+export const RejectStaffPaymentParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const RejectStaffPaymentResponse = zod.object({
+  id: zod.number(),
+  staffId: zod.number(),
+  staffName: zod.string(),
+  amount: zod.number(),
+  note: zod.string().nullish(),
+  status: zod.string(),
+  date: zod.string(),
+  approvedAt: zod.string().nullish(),
+});
+
+/**
+ * @summary Enroll or update a staff member's face descriptor
+ */
+export const EnrollStaffFaceParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const EnrollStaffFaceBody = zod.object({
+  descriptor: zod.array(zod.number()),
+  photoUrl: zod.string().optional(),
+});
+
+export const EnrollStaffFaceResponse = zod.object({
+  id: zod.number(),
+  name: zod.string(),
+  commissionRate: zod.number(),
+  createdAt: zod.string(),
+});
+
+/**
+ * @summary Monthly attendance summary for a staff member
+ */
+export const GetStaffAttendanceSummaryParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const GetStaffAttendanceSummaryQueryParams = zod.object({
+  month: zod.coerce.number().optional(),
+  year: zod.coerce.number().optional(),
+});
+
+export const GetStaffAttendanceSummaryResponse = zod.object({
+  staffId: zod.number(),
+  staffName: zod.string(),
+  month: zod.number(),
+  year: zod.number(),
+  present: zod.number(),
+  halfDay: zod.number(),
+  absent: zod.number(),
+  totalMarked: zod.number(),
+  days: zod.array(
+    zod.object({
+      date: zod.string(),
+      status: zod.string(),
+      checkInTime: zod.string().nullish(),
+    }),
+  ),
+});
+
+/**
+ * @summary List loans for a staff member
+ */
+export const ListStaffLoansParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const ListStaffLoansResponseItem = zod.object({
+  id: zod.number(),
+  staffId: zod.number(),
+  amount: zod.number(),
+  note: zod.string().nullish(),
+  status: zod.string(),
+  date: zod.string(),
+});
+export const ListStaffLoansResponse = zod.array(ListStaffLoansResponseItem);
+
+/**
+ * @summary Salary overview for a staff member
+ */
+export const GetStaffSalaryParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const GetStaffSalaryQueryParams = zod.object({
+  month: zod.coerce.number().optional(),
+  year: zod.coerce.number().optional(),
+});
+
+export const GetStaffSalaryResponse = zod.object({
+  staffId: zod.number(),
+  staffName: zod.string(),
+  month: zod.number(),
+  year: zod.number(),
+  earnings: zod.number(),
+  deductions: zod.number(),
+  paymentsApproved: zod.number(),
+  paymentsPending: zod.number(),
+  netPayable: zod.number(),
+  presentDays: zod.number(),
+  halfDays: zod.number(),
+  payableDays: zod.number(),
+  loanOutstanding: zod.number(),
+  totalItems: zod.number(),
+});
+
+/**
  * @summary List stock items
  */
 export const ListStockResponseItem = zod.object({
@@ -490,6 +740,11 @@ export const ListInvoicesResponseItem = zod.object({
   staffId: zod.number(),
   staffName: zod.string(),
   totalAmount: zod.number(),
+  miscCharge: zod.number(),
+  claimCharge: zod.number(),
+  cashDeposit: zod.number(),
+  gstCharge: zod.number(),
+  packingCharge: zod.number(),
   status: zod.enum(["draft", "confirmed", "cancelled"]),
   imageUrl: zod.string().nullable(),
   notes: zod.string().nullable(),
@@ -520,6 +775,11 @@ export const CreateInvoiceBody = zod.object({
   date: zod.string().optional(),
   notes: zod.string().optional(),
   imageUrl: zod.string().optional(),
+  miscCharge: zod.number().optional(),
+  claimCharge: zod.number().optional(),
+  cashDeposit: zod.number().optional(),
+  gstCharge: zod.number().optional(),
+  packingCharge: zod.number().optional(),
   items: zod.array(
     zod.object({
       productId: zod.number().optional(),
@@ -591,6 +851,11 @@ export const GetInvoiceResponse = zod.object({
   staffId: zod.number(),
   staffName: zod.string(),
   totalAmount: zod.number(),
+  miscCharge: zod.number(),
+  claimCharge: zod.number(),
+  cashDeposit: zod.number(),
+  gstCharge: zod.number(),
+  packingCharge: zod.number(),
   status: zod.enum(["draft", "confirmed", "cancelled"]),
   imageUrl: zod.string().nullable(),
   notes: zod.string().nullable(),
@@ -633,6 +898,11 @@ export const ConfirmInvoiceResponse = zod.object({
     staffId: zod.number(),
     staffName: zod.string(),
     totalAmount: zod.number(),
+    miscCharge: zod.number(),
+    claimCharge: zod.number(),
+    cashDeposit: zod.number(),
+    gstCharge: zod.number(),
+    packingCharge: zod.number(),
     status: zod.enum(["draft", "confirmed", "cancelled"]),
     imageUrl: zod.string().nullable(),
     notes: zod.string().nullable(),

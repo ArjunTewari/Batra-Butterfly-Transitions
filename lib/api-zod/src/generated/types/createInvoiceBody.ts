@@ -14,5 +14,10 @@ export interface CreateInvoiceBody {
   date?: string;
   notes?: string;
   imageUrl?: string;
+  miscCharge?: number;
+  claimCharge?: number;
+  cashDeposit?: number;
+  gstCharge?: number;
+  packingCharge?: number;
   items: CreateInvoiceItemInput[];
 }

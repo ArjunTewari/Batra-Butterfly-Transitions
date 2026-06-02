@@ -22,6 +22,8 @@ import type {
   AnalyzeInvoiceImageBody,
   AnalyzeSaleImageBody,
   AnalyzeSupplierBillBody,
+  AttendanceStatusEntry,
+  AttendanceSummary,
   ConfirmSaleBody,
   ConfirmSaleResult,
   ConfirmStockBody,
@@ -32,13 +34,21 @@ import type {
   CreateRetailerBody,
   CreateSaleBody,
   CreateStaffBody,
+  CreateStaffLoanBody,
+  CreateStaffPaymentBody,
   CreateStockItemBody,
   CreateSupplierBillBody,
   CreateSupplierBody,
   DailySalesEntry,
   DashboardSummary,
+  FaceEnrollBody,
+  FaceScanBody,
+  FaceScanResult,
+  GetAttendanceParams,
   GetDailySalesSummaryParams,
+  GetStaffAttendanceSummaryParams,
   GetStaffPerformanceParams,
+  GetStaffSalaryParams,
   GetTopRetailersParams,
   HealthStatus,
   ImageAnalysisResult,
@@ -47,15 +57,21 @@ import type {
   InvoiceWithItems,
   LedgerEntry,
   ListInvoicesParams,
+  ListStaffPaymentsParams,
+  MarkAttendanceBody,
   PaymentClearanceRecord,
   PaymentClearanceResult,
   ProductImage,
   Retailer,
   RetailerAnalytics,
   RetailerSummary,
+  SalaryOverview,
   Sale,
   SaleAnalysisResult,
   Staff,
+  StaffAttendanceRecord,
+  StaffLoan,
+  StaffPayment,
   StaffPerformance,
   StockItem,
   StockMovement,
@@ -1339,6 +1355,1196 @@ export const useCreateSale = <
 > => {
   return useMutation(getCreateSaleMutationOptions(options));
 };
+
+/**
+ * @summary Get attendance for all staff on a date
+ */
+export const getGetAttendanceUrl = (params?: GetAttendanceParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/staff/attendance?${stringifiedParams}`
+    : `/api/staff/attendance`;
+};
+
+export const getAttendance = async (
+  params?: GetAttendanceParams,
+  options?: RequestInit,
+): Promise<AttendanceStatusEntry[]> => {
+  return customFetch<AttendanceStatusEntry[]>(getGetAttendanceUrl(params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetAttendanceQueryKey = (params?: GetAttendanceParams) => {
+  return [`/api/staff/attendance`, ...(params ? [params] : [])] as const;
+};
+
+export const getGetAttendanceQueryOptions = <
+  TData = Awaited<ReturnType<typeof getAttendance>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: GetAttendanceParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getAttendance>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetAttendanceQueryKey(params);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getAttendance>>> = ({
+    signal,
+  }) => getAttendance(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getAttendance>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetAttendanceQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getAttendance>>
+>;
+export type GetAttendanceQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get attendance for all staff on a date
+ */
+
+export function useGetAttendance<
+  TData = Awaited<ReturnType<typeof getAttendance>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: GetAttendanceParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getAttendance>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetAttendanceQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Mark attendance by matching a scanned face descriptor
+ */
+export const getFaceScanAttendanceUrl = () => {
+  return `/api/staff/attendance/face-scan`;
+};
+
+export const faceScanAttendance = async (
+  faceScanBody: FaceScanBody,
+  options?: RequestInit,
+): Promise<FaceScanResult> => {
+  return customFetch<FaceScanResult>(getFaceScanAttendanceUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(faceScanBody),
+  });
+};
+
+export const getFaceScanAttendanceMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof faceScanAttendance>>,
+    TError,
+    { data: BodyType<FaceScanBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof faceScanAttendance>>,
+  TError,
+  { data: BodyType<FaceScanBody> },
+  TContext
+> => {
+  const mutationKey = ["faceScanAttendance"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof faceScanAttendance>>,
+    { data: BodyType<FaceScanBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return faceScanAttendance(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type FaceScanAttendanceMutationResult = NonNullable<
+  Awaited<ReturnType<typeof faceScanAttendance>>
+>;
+export type FaceScanAttendanceMutationBody = BodyType<FaceScanBody>;
+export type FaceScanAttendanceMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Mark attendance by matching a scanned face descriptor
+ */
+export const useFaceScanAttendance = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof faceScanAttendance>>,
+    TError,
+    { data: BodyType<FaceScanBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof faceScanAttendance>>,
+  TError,
+  { data: BodyType<FaceScanBody> },
+  TContext
+> => {
+  return useMutation(getFaceScanAttendanceMutationOptions(options));
+};
+
+/**
+ * @summary Manually mark attendance for a staff member
+ */
+export const getMarkAttendanceUrl = () => {
+  return `/api/staff/attendance/mark`;
+};
+
+export const markAttendance = async (
+  markAttendanceBody: MarkAttendanceBody,
+  options?: RequestInit,
+): Promise<StaffAttendanceRecord> => {
+  return customFetch<StaffAttendanceRecord>(getMarkAttendanceUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(markAttendanceBody),
+  });
+};
+
+export const getMarkAttendanceMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof markAttendance>>,
+    TError,
+    { data: BodyType<MarkAttendanceBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof markAttendance>>,
+  TError,
+  { data: BodyType<MarkAttendanceBody> },
+  TContext
+> => {
+  const mutationKey = ["markAttendance"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof markAttendance>>,
+    { data: BodyType<MarkAttendanceBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return markAttendance(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type MarkAttendanceMutationResult = NonNullable<
+  Awaited<ReturnType<typeof markAttendance>>
+>;
+export type MarkAttendanceMutationBody = BodyType<MarkAttendanceBody>;
+export type MarkAttendanceMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Manually mark attendance for a staff member
+ */
+export const useMarkAttendance = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof markAttendance>>,
+    TError,
+    { data: BodyType<MarkAttendanceBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof markAttendance>>,
+  TError,
+  { data: BodyType<MarkAttendanceBody> },
+  TContext
+> => {
+  return useMutation(getMarkAttendanceMutationOptions(options));
+};
+
+/**
+ * @summary Record a loan/advance for a staff member
+ */
+export const getCreateStaffLoanUrl = () => {
+  return `/api/staff/loans`;
+};
+
+export const createStaffLoan = async (
+  createStaffLoanBody: CreateStaffLoanBody,
+  options?: RequestInit,
+): Promise<StaffLoan> => {
+  return customFetch<StaffLoan>(getCreateStaffLoanUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(createStaffLoanBody),
+  });
+};
+
+export const getCreateStaffLoanMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createStaffLoan>>,
+    TError,
+    { data: BodyType<CreateStaffLoanBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createStaffLoan>>,
+  TError,
+  { data: BodyType<CreateStaffLoanBody> },
+  TContext
+> => {
+  const mutationKey = ["createStaffLoan"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createStaffLoan>>,
+    { data: BodyType<CreateStaffLoanBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return createStaffLoan(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateStaffLoanMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createStaffLoan>>
+>;
+export type CreateStaffLoanMutationBody = BodyType<CreateStaffLoanBody>;
+export type CreateStaffLoanMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Record a loan/advance for a staff member
+ */
+export const useCreateStaffLoan = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createStaffLoan>>,
+    TError,
+    { data: BodyType<CreateStaffLoanBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createStaffLoan>>,
+  TError,
+  { data: BodyType<CreateStaffLoanBody> },
+  TContext
+> => {
+  return useMutation(getCreateStaffLoanMutationOptions(options));
+};
+
+/**
+ * @summary Mark a staff loan as cleared
+ */
+export const getClearStaffLoanUrl = (id: number) => {
+  return `/api/staff/loans/${id}/clear`;
+};
+
+export const clearStaffLoan = async (
+  id: number,
+  options?: RequestInit,
+): Promise<StaffLoan> => {
+  return customFetch<StaffLoan>(getClearStaffLoanUrl(id), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getClearStaffLoanMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof clearStaffLoan>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof clearStaffLoan>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  const mutationKey = ["clearStaffLoan"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof clearStaffLoan>>,
+    { id: number }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return clearStaffLoan(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ClearStaffLoanMutationResult = NonNullable<
+  Awaited<ReturnType<typeof clearStaffLoan>>
+>;
+
+export type ClearStaffLoanMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Mark a staff loan as cleared
+ */
+export const useClearStaffLoan = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof clearStaffLoan>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof clearStaffLoan>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  return useMutation(getClearStaffLoanMutationOptions(options));
+};
+
+/**
+ * @summary List staff payment clearance requests
+ */
+export const getListStaffPaymentsUrl = (params?: ListStaffPaymentsParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/staff/payments?${stringifiedParams}`
+    : `/api/staff/payments`;
+};
+
+export const listStaffPayments = async (
+  params?: ListStaffPaymentsParams,
+  options?: RequestInit,
+): Promise<StaffPayment[]> => {
+  return customFetch<StaffPayment[]>(getListStaffPaymentsUrl(params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListStaffPaymentsQueryKey = (
+  params?: ListStaffPaymentsParams,
+) => {
+  return [`/api/staff/payments`, ...(params ? [params] : [])] as const;
+};
+
+export const getListStaffPaymentsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listStaffPayments>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: ListStaffPaymentsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listStaffPayments>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getListStaffPaymentsQueryKey(params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listStaffPayments>>
+  > = ({ signal }) => listStaffPayments(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listStaffPayments>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListStaffPaymentsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listStaffPayments>>
+>;
+export type ListStaffPaymentsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List staff payment clearance requests
+ */
+
+export function useListStaffPayments<
+  TData = Awaited<ReturnType<typeof listStaffPayments>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: ListStaffPaymentsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listStaffPayments>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListStaffPaymentsQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Request a staff payment clearance (pending master approval)
+ */
+export const getCreateStaffPaymentUrl = () => {
+  return `/api/staff/payments`;
+};
+
+export const createStaffPayment = async (
+  createStaffPaymentBody: CreateStaffPaymentBody,
+  options?: RequestInit,
+): Promise<StaffPayment> => {
+  return customFetch<StaffPayment>(getCreateStaffPaymentUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(createStaffPaymentBody),
+  });
+};
+
+export const getCreateStaffPaymentMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createStaffPayment>>,
+    TError,
+    { data: BodyType<CreateStaffPaymentBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createStaffPayment>>,
+  TError,
+  { data: BodyType<CreateStaffPaymentBody> },
+  TContext
+> => {
+  const mutationKey = ["createStaffPayment"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createStaffPayment>>,
+    { data: BodyType<CreateStaffPaymentBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return createStaffPayment(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateStaffPaymentMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createStaffPayment>>
+>;
+export type CreateStaffPaymentMutationBody = BodyType<CreateStaffPaymentBody>;
+export type CreateStaffPaymentMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Request a staff payment clearance (pending master approval)
+ */
+export const useCreateStaffPayment = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createStaffPayment>>,
+    TError,
+    { data: BodyType<CreateStaffPaymentBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createStaffPayment>>,
+  TError,
+  { data: BodyType<CreateStaffPaymentBody> },
+  TContext
+> => {
+  return useMutation(getCreateStaffPaymentMutationOptions(options));
+};
+
+/**
+ * @summary Approve a staff payment (master only)
+ */
+export const getApproveStaffPaymentUrl = (id: number) => {
+  return `/api/staff/payments/${id}/approve`;
+};
+
+export const approveStaffPayment = async (
+  id: number,
+  options?: RequestInit,
+): Promise<StaffPayment> => {
+  return customFetch<StaffPayment>(getApproveStaffPaymentUrl(id), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getApproveStaffPaymentMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof approveStaffPayment>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof approveStaffPayment>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  const mutationKey = ["approveStaffPayment"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof approveStaffPayment>>,
+    { id: number }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return approveStaffPayment(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ApproveStaffPaymentMutationResult = NonNullable<
+  Awaited<ReturnType<typeof approveStaffPayment>>
+>;
+
+export type ApproveStaffPaymentMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Approve a staff payment (master only)
+ */
+export const useApproveStaffPayment = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof approveStaffPayment>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof approveStaffPayment>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  return useMutation(getApproveStaffPaymentMutationOptions(options));
+};
+
+/**
+ * @summary Reject a staff payment (master only)
+ */
+export const getRejectStaffPaymentUrl = (id: number) => {
+  return `/api/staff/payments/${id}/reject`;
+};
+
+export const rejectStaffPayment = async (
+  id: number,
+  options?: RequestInit,
+): Promise<StaffPayment> => {
+  return customFetch<StaffPayment>(getRejectStaffPaymentUrl(id), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getRejectStaffPaymentMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof rejectStaffPayment>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof rejectStaffPayment>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  const mutationKey = ["rejectStaffPayment"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof rejectStaffPayment>>,
+    { id: number }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return rejectStaffPayment(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type RejectStaffPaymentMutationResult = NonNullable<
+  Awaited<ReturnType<typeof rejectStaffPayment>>
+>;
+
+export type RejectStaffPaymentMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Reject a staff payment (master only)
+ */
+export const useRejectStaffPayment = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof rejectStaffPayment>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof rejectStaffPayment>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  return useMutation(getRejectStaffPaymentMutationOptions(options));
+};
+
+/**
+ * @summary Enroll or update a staff member's face descriptor
+ */
+export const getEnrollStaffFaceUrl = (id: number) => {
+  return `/api/staff/${id}/face-enroll`;
+};
+
+export const enrollStaffFace = async (
+  id: number,
+  faceEnrollBody: FaceEnrollBody,
+  options?: RequestInit,
+): Promise<Staff> => {
+  return customFetch<Staff>(getEnrollStaffFaceUrl(id), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(faceEnrollBody),
+  });
+};
+
+export const getEnrollStaffFaceMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof enrollStaffFace>>,
+    TError,
+    { id: number; data: BodyType<FaceEnrollBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof enrollStaffFace>>,
+  TError,
+  { id: number; data: BodyType<FaceEnrollBody> },
+  TContext
+> => {
+  const mutationKey = ["enrollStaffFace"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof enrollStaffFace>>,
+    { id: number; data: BodyType<FaceEnrollBody> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return enrollStaffFace(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type EnrollStaffFaceMutationResult = NonNullable<
+  Awaited<ReturnType<typeof enrollStaffFace>>
+>;
+export type EnrollStaffFaceMutationBody = BodyType<FaceEnrollBody>;
+export type EnrollStaffFaceMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Enroll or update a staff member's face descriptor
+ */
+export const useEnrollStaffFace = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof enrollStaffFace>>,
+    TError,
+    { id: number; data: BodyType<FaceEnrollBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof enrollStaffFace>>,
+  TError,
+  { id: number; data: BodyType<FaceEnrollBody> },
+  TContext
+> => {
+  return useMutation(getEnrollStaffFaceMutationOptions(options));
+};
+
+/**
+ * @summary Monthly attendance summary for a staff member
+ */
+export const getGetStaffAttendanceSummaryUrl = (
+  id: number,
+  params?: GetStaffAttendanceSummaryParams,
+) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/staff/${id}/attendance-summary?${stringifiedParams}`
+    : `/api/staff/${id}/attendance-summary`;
+};
+
+export const getStaffAttendanceSummary = async (
+  id: number,
+  params?: GetStaffAttendanceSummaryParams,
+  options?: RequestInit,
+): Promise<AttendanceSummary> => {
+  return customFetch<AttendanceSummary>(
+    getGetStaffAttendanceSummaryUrl(id, params),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getGetStaffAttendanceSummaryQueryKey = (
+  id: number,
+  params?: GetStaffAttendanceSummaryParams,
+) => {
+  return [
+    `/api/staff/${id}/attendance-summary`,
+    ...(params ? [params] : []),
+  ] as const;
+};
+
+export const getGetStaffAttendanceSummaryQueryOptions = <
+  TData = Awaited<ReturnType<typeof getStaffAttendanceSummary>>,
+  TError = ErrorType<unknown>,
+>(
+  id: number,
+  params?: GetStaffAttendanceSummaryParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getStaffAttendanceSummary>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetStaffAttendanceSummaryQueryKey(id, params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getStaffAttendanceSummary>>
+  > = ({ signal }) =>
+    getStaffAttendanceSummary(id, params, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getStaffAttendanceSummary>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetStaffAttendanceSummaryQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getStaffAttendanceSummary>>
+>;
+export type GetStaffAttendanceSummaryQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Monthly attendance summary for a staff member
+ */
+
+export function useGetStaffAttendanceSummary<
+  TData = Awaited<ReturnType<typeof getStaffAttendanceSummary>>,
+  TError = ErrorType<unknown>,
+>(
+  id: number,
+  params?: GetStaffAttendanceSummaryParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getStaffAttendanceSummary>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetStaffAttendanceSummaryQueryOptions(
+    id,
+    params,
+    options,
+  );
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary List loans for a staff member
+ */
+export const getListStaffLoansUrl = (id: number) => {
+  return `/api/staff/${id}/loans`;
+};
+
+export const listStaffLoans = async (
+  id: number,
+  options?: RequestInit,
+): Promise<StaffLoan[]> => {
+  return customFetch<StaffLoan[]>(getListStaffLoansUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListStaffLoansQueryKey = (id: number) => {
+  return [`/api/staff/${id}/loans`] as const;
+};
+
+export const getListStaffLoansQueryOptions = <
+  TData = Awaited<ReturnType<typeof listStaffLoans>>,
+  TError = ErrorType<unknown>,
+>(
+  id: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listStaffLoans>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListStaffLoansQueryKey(id);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof listStaffLoans>>> = ({
+    signal,
+  }) => listStaffLoans(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof listStaffLoans>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListStaffLoansQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listStaffLoans>>
+>;
+export type ListStaffLoansQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List loans for a staff member
+ */
+
+export function useListStaffLoans<
+  TData = Awaited<ReturnType<typeof listStaffLoans>>,
+  TError = ErrorType<unknown>,
+>(
+  id: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listStaffLoans>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListStaffLoansQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Salary overview for a staff member
+ */
+export const getGetStaffSalaryUrl = (
+  id: number,
+  params?: GetStaffSalaryParams,
+) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/staff/${id}/salary?${stringifiedParams}`
+    : `/api/staff/${id}/salary`;
+};
+
+export const getStaffSalary = async (
+  id: number,
+  params?: GetStaffSalaryParams,
+  options?: RequestInit,
+): Promise<SalaryOverview> => {
+  return customFetch<SalaryOverview>(getGetStaffSalaryUrl(id, params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetStaffSalaryQueryKey = (
+  id: number,
+  params?: GetStaffSalaryParams,
+) => {
+  return [`/api/staff/${id}/salary`, ...(params ? [params] : [])] as const;
+};
+
+export const getGetStaffSalaryQueryOptions = <
+  TData = Awaited<ReturnType<typeof getStaffSalary>>,
+  TError = ErrorType<unknown>,
+>(
+  id: number,
+  params?: GetStaffSalaryParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getStaffSalary>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetStaffSalaryQueryKey(id, params);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getStaffSalary>>> = ({
+    signal,
+  }) => getStaffSalary(id, params, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getStaffSalary>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetStaffSalaryQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getStaffSalary>>
+>;
+export type GetStaffSalaryQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Salary overview for a staff member
+ */
+
+export function useGetStaffSalary<
+  TData = Awaited<ReturnType<typeof getStaffSalary>>,
+  TError = ErrorType<unknown>,
+>(
+  id: number,
+  params?: GetStaffSalaryParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getStaffSalary>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetStaffSalaryQueryOptions(id, params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
 
 /**
  * @summary List stock items

@@ -55,6 +55,26 @@ import { compressImage } from "@/lib/image";
 
 const DEFAULT_SALE_QUANTITY = 6;
 
+type ChargeKey = "miscCharge" | "claimCharge" | "cashDeposit" | "gstCharge" | "packingCharge";
+
+const CHARGE_CONFIG: { key: ChargeKey; label: string }[] = [
+  { key: "miscCharge", label: "Misc" },
+  { key: "claimCharge", label: "Claim" },
+  { key: "cashDeposit", label: "Cash Deposit" },
+  { key: "gstCharge", label: "GST" },
+  { key: "packingCharge", label: "Packing" },
+];
+
+type ChargeState = Record<ChargeKey, { enabled: boolean; value: string }>;
+
+const INITIAL_CHARGES: ChargeState = {
+  miscCharge: { enabled: false, value: "" },
+  claimCharge: { enabled: false, value: "" },
+  cashDeposit: { enabled: false, value: "" },
+  gstCharge: { enabled: false, value: "" },
+  packingCharge: { enabled: false, value: "" },
+};
+
 export default function StockSale() {
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [imageBase64, setImageBase64] = useState<string | null>(null);
@@ -62,6 +82,7 @@ export default function StockSale() {
   const [selectedRetailerId, setSelectedRetailerId] = useState<string>("");
   const [selectedStaffId, setSelectedStaffId] = useState<string>("");
   const [invoiceNotes, setInvoiceNotes] = useState("");
+  const [charges, setCharges] = useState<ChargeState>(INITIAL_CHARGES);
   const [invoiceConfirmed, setInvoiceConfirmed] = useState(false);
   const [confirmedInvoiceId, setConfirmedInvoiceId] = useState<number | null>(null);
   const [confirmedInvoiceNumber, setConfirmedInvoiceNumber] = useState<string | null>(null);
@@ -142,6 +163,23 @@ export default function StockSale() {
     0
   );
 
+  const chargeValue = (key: ChargeKey) => {
+    const c = charges[key];
+    if (!c.enabled) return 0;
+    const n = parseFloat(c.value);
+    return Number.isFinite(n) && n > 0 ? n : 0;
+  };
+  const activeCharges = CHARGE_CONFIG.map((c) => ({ ...c, amount: chargeValue(c.key) })).filter(
+    (c) => c.amount > 0
+  );
+  const chargesTotal = activeCharges.reduce((sum, c) => sum + c.amount, 0);
+  const grandTotal = totalAmount + chargesTotal;
+
+  const toggleCharge = (key: ChargeKey) =>
+    setCharges((prev) => ({ ...prev, [key]: { ...prev[key], enabled: !prev[key].enabled } }));
+  const setChargeValue = (key: ChargeKey, value: string) =>
+    setCharges((prev) => ({ ...prev, [key]: { ...prev[key], value } }));
+
   const selectedRetailer = retailers?.find((r) => String(r.id) === selectedRetailerId);
   const selectedStaff = staff?.find((s) => String(s.id) === selectedStaffId);
 
@@ -188,11 +226,16 @@ export default function StockSale() {
       return `${name} ${qty} ${unit} ${price} ${amount}`;
     });
 
+    const chargeLines = activeCharges.map(
+      (c) => `${c.label.padEnd(40)} ${c.amount.toFixed(2).padStart(10)}`
+    );
+
     const footer = [
       "-".repeat(48),
-      `${"".padEnd(40)} ${totalAmount.toFixed(2).padStart(10)}`,
+      `${"Sub Total".padEnd(40)} ${totalAmount.toFixed(2).padStart(10)}`,
+      ...chargeLines,
       "",
-      `Grand Total : ${" ".repeat(8)} ${String(totalUnits).padStart(6)} Pcs. ${" ".repeat(8)} \u20B9 ${totalAmount.toFixed(2).padStart(8)}`,
+      `Grand Total : ${" ".repeat(8)} ${String(totalUnits).padStart(6)} Pcs. ${" ".repeat(8)} \u20B9 ${grandTotal.toFixed(2).padStart(8)}`,
       "=".repeat(48),
       invoiceNotes ? `Note : ${invoiceNotes}` : "",
     ].filter(Boolean);
@@ -276,6 +319,11 @@ export default function StockSale() {
           invoiceNumber,
           notes: invoiceNotes || undefined,
           imageUrl: imageBase64 ?? undefined,
+          miscCharge: chargeValue("miscCharge"),
+          claimCharge: chargeValue("claimCharge"),
+          cashDeposit: chargeValue("cashDeposit"),
+          gstCharge: chargeValue("gstCharge"),
+          packingCharge: chargeValue("packingCharge"),
           items: validItems.map((item) => ({
             articleCode: item.articleCode,
             productName: item.matchedProduct?.name ?? item.articleCode,
@@ -330,6 +378,7 @@ export default function StockSale() {
     setSelectedRetailerId("");
     setSelectedStaffId("");
     setInvoiceNotes("");
+    setCharges(INITIAL_CHARGES);
     setInvoiceConfirmed(false);
     setConfirmedInvoiceId(null);
     setConfirmedInvoiceNumber(null);
@@ -633,12 +682,72 @@ export default function StockSale() {
                           </p>
                         </div>
                       ))}
+                      {chargesTotal > 0 && (
+                        <div className="flex justify-between px-3 py-1.5 text-xs">
+                          <span className="text-gray-400">Sub Total</span>
+                          <span className="text-gray-300">{formatCurrency(totalAmount)}</span>
+                        </div>
+                      )}
+                      {activeCharges.map((c) => (
+                        <div key={c.key} className="flex justify-between px-3 py-1.5 text-xs">
+                          <span className="text-gray-400">{c.label}</span>
+                          <span className="text-gray-300">{formatCurrency(c.amount)}</span>
+                        </div>
+                      ))}
                       <div className="flex justify-between px-3 py-2 bg-white/[0.03]">
-                        <span className="text-sm font-semibold text-white">Total</span>
-                        <span className="text-sm font-bold text-white">{formatCurrency(totalAmount)}</span>
+                        <span className="text-sm font-semibold text-white">
+                          {chargesTotal > 0 ? "Grand Total" : "Total"}
+                        </span>
+                        <span className="text-sm font-bold text-white">{formatCurrency(grandTotal)}</span>
                       </div>
                     </div>
                   )}
+                </div>
+
+                {/* Extra Charges */}
+                <div className="space-y-1.5">
+                  <Label className="text-sm text-gray-300">Extra Charges</Label>
+                  <div className="rounded-lg border border-white/10 divide-y divide-white/5 overflow-hidden">
+                    {CHARGE_CONFIG.map((c) => {
+                      const state = charges[c.key];
+                      return (
+                        <div key={c.key} className="flex items-center gap-2 px-3 py-2">
+                          <button
+                            type="button"
+                            onClick={() => toggleCharge(c.key)}
+                            disabled={validItems.length === 0}
+                            aria-pressed={state.enabled}
+                            className={`h-4 w-4 rounded border flex items-center justify-center shrink-0 transition-colors ${
+                              state.enabled
+                                ? "bg-white border-white text-black"
+                                : "border-white/30 text-transparent hover:border-white/60"
+                            } ${validItems.length === 0 ? "opacity-40 cursor-not-allowed" : ""}`}
+                            data-testid={`checkbox-charge-${c.key}`}
+                          >
+                            <CheckCircle2 className="h-3 w-3" />
+                          </button>
+                          <span className="text-sm text-gray-300 flex-1">{c.label}</span>
+                          <div className="relative w-28 shrink-0">
+                            <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-gray-500">₹</span>
+                            <Input
+                              type="number"
+                              inputMode="decimal"
+                              min={0}
+                              placeholder="0"
+                              value={state.value}
+                              onChange={(e) => setChargeValue(c.key, e.target.value)}
+                              onFocus={() => {
+                                if (!state.enabled) toggleCharge(c.key);
+                              }}
+                              disabled={!state.enabled || validItems.length === 0}
+                              className="h-8 pl-5 bg-white/5 border-white/10 text-white text-sm text-right"
+                              data-testid={`input-charge-${c.key}`}
+                            />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
 
                 {/* Notes */}

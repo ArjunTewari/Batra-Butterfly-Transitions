@@ -4,11 +4,12 @@ import {
   useCreateStaff,
   useGetStaffPerformance, getGetStaffPerformanceQueryKey
 } from "@workspace/api-client-react";
+import { Link } from "wouter";
 import { motion } from "framer-motion";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Plus, Trophy, Target, Award } from "lucide-react";
+import { Plus, Trophy, Target, Award, CalendarCheck } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
@@ -75,6 +76,13 @@ export default function Staff() {
           <p className="text-gray-400 mt-1">Track sales performance and commissions</p>
         </div>
         
+        <div className="flex gap-2">
+        <Link href="/staff/attendance">
+          <Button variant="outline" className="border-white/10 text-white hover:bg-white/5" data-testid="button-attendance">
+            <CalendarCheck className="mr-2 h-4 w-4" />
+            Attendance
+          </Button>
+        </Link>
         <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
           <DialogTrigger asChild>
             <Button data-testid="button-add-staff" className="bg-white text-black hover:bg-gray-200">
@@ -123,6 +131,7 @@ export default function Staff() {
             </Form>
           </DialogContent>
         </Dialog>
+        </div>
       </div>
 
       {isLoading ? (
@@ -143,7 +152,8 @@ export default function Staff() {
             
             return (
               <motion.div key={staff.id} variants={item}>
-                <Card className={`bg-black border ${isTop3 ? 'border-white/20' : 'border-white/5'} overflow-hidden relative`}>
+                <Link href={`/staff/${staff.id}`}>
+                <Card className={`bg-black border ${isTop3 ? 'border-white/20' : 'border-white/5'} overflow-hidden relative cursor-pointer hover:border-white/30 transition-colors`}>
                   {index === 0 && <div className="absolute inset-0 bg-gradient-to-r from-yellow-500/10 to-transparent opacity-50" />}
                   {index === 1 && <div className="absolute inset-0 bg-gradient-to-r from-gray-300/10 to-transparent opacity-50" />}
                   {index === 2 && <div className="absolute inset-0 bg-gradient-to-r from-amber-700/10 to-transparent opacity-50" />}
@@ -164,7 +174,7 @@ export default function Staff() {
                             {staff.name}
                             {index === 0 && <Trophy className="h-4 w-4 text-yellow-500" />}
                           </h3>
-                          <p className="text-sm text-gray-400">Commission: {staff.commissionRate}%</p>
+                          <p className="text-sm text-gray-400">Commission: ₹1 / item</p>
                         </div>
                       </div>
                       
@@ -185,6 +195,7 @@ export default function Staff() {
                     </div>
                   </CardContent>
                 </Card>
+                </Link>
               </motion.div>
             );
           })}

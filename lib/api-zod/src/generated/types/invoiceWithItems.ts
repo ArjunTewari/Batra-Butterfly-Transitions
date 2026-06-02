@@ -16,6 +16,11 @@ export interface InvoiceWithItems {
   staffId: number;
   staffName: string;
   totalAmount: number;
+  miscCharge: number;
+  claimCharge: number;
+  cashDeposit: number;
+  gstCharge: number;
+  packingCharge: number;
   status: InvoiceWithItemsStatus;
   /** @nullable */
   imageUrl: string | null;
