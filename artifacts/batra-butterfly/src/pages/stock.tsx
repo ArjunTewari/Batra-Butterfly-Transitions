@@ -4,6 +4,7 @@ import {
   useListStock,
   getListStockQueryKey,
   useCreateStockItem,
+  useDeleteStockItem,
 } from "@workspace/api-client-react";
 import { motion } from "framer-motion";
 import { Card, CardContent } from "@/components/ui/card";
@@ -17,7 +18,19 @@ import {
   ArrowRight,
   PackageOpen,
   ShoppingBag,
+  Trash2,
 } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { formatCurrency } from "@/lib/utils";
 import {
   Dialog,
@@ -58,6 +71,18 @@ export default function Stock() {
   });
 
   const createStockItem = useCreateStockItem();
+  const deleteStockItem = useDeleteStockItem();
+
+  const handleDelete = (id: number) => {
+    deleteStockItem.mutate(
+      { id },
+      {
+        onSuccess: () => {
+          queryClient.invalidateQueries({ queryKey: getListStockQueryKey() });
+        },
+      },
+    );
+  };
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -309,6 +334,39 @@ export default function Stock() {
                     <Badge className="absolute top-2 right-2 bg-black/60 backdrop-blur-md text-white border-white/10">
                       {item.articleCode}
                     </Badge>
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <button
+                          type="button"
+                          className="absolute top-2 left-2 p-1.5 rounded-md bg-black/60 backdrop-blur-md text-gray-300 hover:text-red-400 hover:bg-black/80 transition-colors opacity-0 group-hover:opacity-100"
+                          data-testid={`button-delete-${item.id}`}
+                          aria-label="Delete product"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent className="bg-black border border-white/10 text-white">
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>Delete "{item.name}"?</AlertDialogTitle>
+                          <AlertDialogDescription className="text-gray-400">
+                            This permanently removes the product, its photos, and its
+                            stock movement history. Past invoices are kept. This cannot be undone.
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel className="bg-white/5 border-white/10 text-white hover:bg-white/10 hover:text-white">
+                            Cancel
+                          </AlertDialogCancel>
+                          <AlertDialogAction
+                            onClick={() => handleDelete(item.id)}
+                            className="bg-red-600 text-white hover:bg-red-700"
+                            data-testid={`button-confirm-delete-${item.id}`}
+                          >
+                            Delete
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
                   </div>
                   <div className="p-4">
                     <h3

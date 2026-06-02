@@ -19,4 +19,6 @@ export interface ConfirmStockBody {
   imageUrl?: string | null;
   /** Multiple images to store for the product */
   imageUrls?: string[];
+  supplierId?: number;
+  supplierName?: string;
 }

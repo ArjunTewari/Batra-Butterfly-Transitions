@@ -51,6 +51,9 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
 import { formatCurrency } from "@/lib/utils";
+import { compressImage } from "@/lib/image";
+
+const DEFAULT_SALE_QUANTITY = 6;
 
 export default function StockSale() {
   const [imagePreview, setImagePreview] = useState<string | null>(null);
@@ -75,40 +78,41 @@ export default function StockSale() {
   const { data: retailers } = useListRetailers();
   const { data: staff } = useListStaff();
 
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const objectUrl = URL.createObjectURL(file);
-    setImagePreview(objectUrl);
+    setImagePreview(URL.createObjectURL(file));
     setItems([]);
     setInvoiceConfirmed(false);
     setConfirmedInvoiceId(null);
 
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      const base64String = reader.result as string;
-      setImageBase64(base64String);
-      analyzeSale.mutate(
-        { data: { imageBase64: base64String } },
-        {
-          onSuccess: (data) => {
-            setItems(data.detectedItems);
-            toast({
-              title: "Sale items detected",
-              description: `Found ${data.detectedItems.length} item type(s) in the image.`,
-            });
-          },
-          onError: () => {
-            toast({
-              variant: "destructive",
-              title: "Analysis failed",
-              description: "Could not detect items. Please try a clearer image.",
-            });
-          },
-        }
-      );
-    };
-    reader.readAsDataURL(file);
+    const base64String = await compressImage(file);
+    setImageBase64(base64String);
+    analyzeSale.mutate(
+      { data: { imageBase64: base64String } },
+      {
+        onSuccess: (data) => {
+          // Default every detected product to a standard set quantity of 6 (editable).
+          setItems(
+            data.detectedItems.map((item: SaleDetectedItem) => ({
+              ...item,
+              quantity: DEFAULT_SALE_QUANTITY,
+            })),
+          );
+          toast({
+            title: "Sale items detected",
+            description: `Found ${data.detectedItems.length} item type(s) in the image.`,
+          });
+        },
+        onError: () => {
+          toast({
+            variant: "destructive",
+            title: "Analysis failed",
+            description: "Could not detect items. Please try a clearer image.",
+          });
+        },
+      }
+    );
   };
 
   const updateQuantity = (index: number, delta: number) => {
@@ -582,6 +586,14 @@ export default function StockSale() {
                       ))}
                     </SelectContent>
                   </Select>
+                  {selectedRetailer && (
+                    <Input
+                      readOnly
+                      value={selectedRetailer.phone ?? "No phone on file"}
+                      className="bg-white/5 border-white/10 text-gray-300 mt-1.5"
+                      data-testid="input-retailer-phone"
+                    />
+                  )}
                 </div>
 
                 {/* Staff */}

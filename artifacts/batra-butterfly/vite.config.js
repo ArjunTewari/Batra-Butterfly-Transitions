@@ -37,6 +37,7 @@ export default defineConfig({
             "@assets": path.resolve(import.meta.dirname, "..", "..", "attached_assets"),
         },
         dedupe: ["react", "react-dom"],
+        extensions: [".mjs", ".tsx", ".ts", ".jsx", ".js", ".json"],
     },
     root: path.resolve(import.meta.dirname),
     build: {

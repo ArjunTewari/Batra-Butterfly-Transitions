@@ -19,15 +19,15 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
+import { compressImage } from "@/lib/image";
 
 const MAX_IMAGES = 5;
+const DEFAULT_STOCK_QUANTITY = 6;
 
 const formSchema = z.object({
   articleCode: z.string().min(1, "Article code is required"),
-  name: z.string().min(1, "Product name is required"),
   price: z.coerce.number().min(1, "Selling price must be greater than 0"),
   purchasePrice: z.coerce.number().min(0, "Purchase price must be positive"),
-  quantity: z.coerce.number().min(1, "Quantity must be greater than 0"),
   supplierName: z.string().optional(),
 });
 
@@ -57,10 +57,8 @@ export default function StockUpload() {
     resolver: zodResolver(formSchema),
     defaultValues: {
       articleCode: "",
-      name: "",
       price: 0,
       purchasePrice: 0,
-      quantity: 1,
       supplierName: "",
     },
   });
@@ -94,33 +92,26 @@ export default function StockUpload() {
     return () => document.removeEventListener("mousedown", handleClick);
   }, []);
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files ?? []);
     if (!files.length) return;
 
     const remaining = MAX_IMAGES - images.length;
     const toAdd = files.slice(0, remaining);
 
-    const newEntries: ImageEntry[] = [];
-    let loaded = 0;
+    const newEntries: ImageEntry[] = await Promise.all(
+      toAdd.map(async (file) => {
+        const base64 = await compressImage(file);
+        return { preview: base64, base64 };
+      }),
+    );
 
-    toAdd.forEach((file) => {
-      const preview = URL.createObjectURL(file);
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        newEntries.push({ preview, base64: reader.result as string });
-        loaded++;
-        if (loaded === toAdd.length) {
-          setImages((prev) => {
-            const updated = [...prev, ...newEntries];
-            setActiveIdx(updated.length - 1);
-            return updated;
-          });
-          if (fileInputRef.current) fileInputRef.current.value = "";
-        }
-      };
-      reader.readAsDataURL(file);
+    setImages((prev) => {
+      const updated = [...prev, ...newEntries];
+      setActiveIdx(updated.length - 1);
+      return updated;
     });
+    if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
   const removeImage = (idx: number) => {
@@ -152,11 +143,9 @@ export default function StockUpload() {
 
           form.setValue("articleCode", data.predictedArticleCode);
           if (isNew) {
-            form.setValue("name", data.suggestedName ?? "");
             form.setValue("price", data.suggestedPrice ?? 0);
             form.setValue("purchasePrice", 0);
           } else if (matched) {
-            form.setValue("name", matched.name);
             form.setValue("price", matched.price ?? 0);
             form.setValue("purchasePrice", matched.purchasePrice ?? 0);
           }
@@ -196,16 +185,21 @@ export default function StockUpload() {
       analyzeImage.data?.allProducts.find((p) => p.articleCode === values.articleCode) ||
       stockItems?.find((p) => p.articleCode === values.articleCode);
 
+    const resolvedName =
+      matchedProduct?.name ||
+      analyzeImage.data?.suggestedName?.trim() ||
+      values.articleCode;
+
     confirmMovement.mutate(
       {
         data: {
           productId: matchedProduct?.id,
           articleCode: values.articleCode,
-          quantity: values.quantity,
+          quantity: DEFAULT_STOCK_QUANTITY,
           type: "in",
           imageUrl: images[0]?.base64 ?? null,
           imageUrls: images.map((img) => img.base64),
-          name: values.name.trim(),
+          name: resolvedName,
           price: values.price,
           purchasePrice: values.purchasePrice,
           supplierId: selectedSupplierId ?? undefined,
@@ -217,8 +211,8 @@ export default function StockUpload() {
           toast({
             title: isNewProduct ? "New product created" : "Stock updated",
             description: isNewProduct
-              ? `Created ${values.articleCode} and added ${values.quantity} items.`
-              : `Restocked ${values.articleCode} — ${values.quantity} items added.`,
+              ? `Created ${values.articleCode} and added ${DEFAULT_STOCK_QUANTITY} items.`
+              : `Restocked ${values.articleCode} — ${DEFAULT_STOCK_QUANTITY} items added.`,
           });
           setImages([]);
           prevImageCount.current = 0;
@@ -435,26 +429,6 @@ export default function StockUpload() {
                   )}
                 />
 
-                <FormField
-                  control={form.control}
-                  name="name"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Product Name</FormLabel>
-                      <FormControl>
-                        <Input
-                          placeholder="Enter product name"
-                          className="bg-white/5 border-white/10 text-white"
-                          {...field}
-                          data-testid="input-upload-name"
-                          disabled={!hasImages}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
                 <div className="grid grid-cols-2 gap-4">
                   <FormField
                     control={form.control}
@@ -497,26 +471,6 @@ export default function StockUpload() {
                     )}
                   />
                 </div>
-
-                <FormField
-                  control={form.control}
-                  name="quantity"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Quantity</FormLabel>
-                      <FormControl>
-                        <Input
-                          type="number"
-                          className="bg-white/5 border-white/10 text-white"
-                          {...field}
-                          data-testid="input-upload-qty"
-                          disabled={!hasImages}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
 
                 {/* Supplier / Factory Name — with autocomplete */}
                 <FormField

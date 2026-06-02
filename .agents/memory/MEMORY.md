@@ -1,1 +1,2 @@
 - [Production session cookies](prod-session-cookies.md) — login 200 then all 401 in prod = missing `app.set("trust proxy", 1)` before express-session (Replit TLS proxy + secure cookie).
+- [API codegen composite .d.ts](api-codegen-composite-dts.md) — new generated hooks invisible to artifacts until you rebuild api-client-react: `tsc --build lib/api-client-react/tsconfig.json --force`.

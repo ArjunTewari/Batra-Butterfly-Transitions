@@ -411,6 +411,13 @@ export const ListStockMovementsResponse = zod.array(
 );
 
 /**
+ * @summary Delete a product and its associated stock data
+ */
+export const DeleteStockItemParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+/**
  * @summary List all images for a product
  */
 export const ListProductImagesParams = zod.object({

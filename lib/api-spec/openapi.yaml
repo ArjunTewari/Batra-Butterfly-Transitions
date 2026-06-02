@@ -436,6 +436,23 @@ paths:
                 items:
                   $ref: "#/components/schemas/StockMovement"
 
+  /stock/products/{id}:
+    delete:
+      operationId: deleteStockItem
+      tags: [stock]
+      summary: Delete a product and its associated stock data
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          description: Not found
+
   /stock/products/{id}/images:
     get:
       operationId: listProductImages

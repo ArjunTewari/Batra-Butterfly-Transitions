@@ -1913,6 +1913,90 @@ export function useListStockMovements<
 }
 
 /**
+ * @summary Delete a product and its associated stock data
+ */
+export const getDeleteStockItemUrl = (id: number) => {
+  return `/api/stock/products/${id}`;
+};
+
+export const deleteStockItem = async (
+  id: number,
+  options?: RequestInit,
+): Promise<void> => {
+  return customFetch<void>(getDeleteStockItemUrl(id), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getDeleteStockItemMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteStockItem>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteStockItem>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  const mutationKey = ["deleteStockItem"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteStockItem>>,
+    { id: number }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return deleteStockItem(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeleteStockItemMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deleteStockItem>>
+>;
+
+export type DeleteStockItemMutationError = ErrorType<void>;
+
+/**
+ * @summary Delete a product and its associated stock data
+ */
+export const useDeleteStockItem = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteStockItem>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof deleteStockItem>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  return useMutation(getDeleteStockItemMutationOptions(options));
+};
+
+/**
  * @summary List all images for a product
  */
 export const getListProductImagesUrl = (id: number) => {

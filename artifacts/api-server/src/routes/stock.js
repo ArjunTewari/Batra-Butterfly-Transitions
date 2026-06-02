@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { eq, desc, and } from "drizzle-orm";
-import { db, productsTable, stockMovementsTable, productImagesTable } from "@workspace/db";
+import { db, productsTable, stockMovementsTable, productImagesTable, suppliersTable } from "@workspace/db";
 import { CreateStockItemBody, AnalyzeStockImageBody, ConfirmStockMovementBody, AnalyzeSaleImageBody, ConfirmSaleBody, } from "@workspace/api-zod";
 import { anthropic } from "@workspace/integrations-anthropic-ai";
 import { requireAuth } from "../middleware/requireAuth";
@@ -105,13 +105,17 @@ router.post("/stock/analyze", requireAuth, async (req, res) => {
     const imageCount = images.length;
     content.push({
         type: "text",
-        text: `You are a footwear inventory assistant. Analyze ${imageCount > 1 ? `these ${imageCount} shoe images` : "this shoe image"} and identify which article code it most likely matches from the inventory list below.
+        text: `You are a footwear inventory assistant. Analyze ${imageCount > 1 ? `these ${imageCount} footwear images` : "this footwear image"} and identify which article code it most likely matches from the inventory list below.
+
+The image may contain shoes, chappals, slides, sandals, boots, or any type of footwear.
 
 Existing inventory:
 ${articleCodeList || "(no products yet)"}
 
 Instructions:
-- ${imageCount > 1 ? "Look at ALL images to get the best view of the shoe" : "Look at the shoe style, color, design, and type"}
+- ${imageCount > 1 ? "Look at ALL images to get the best view of the footwear" : "Look at the footwear style, color, design, and type (shoe, chappal, slide, sandal, boot)"}
+- CRITICAL: Check for any handwritten tags, stickers, or labels on the shoe with numbers/letters. If a tag shows a code like "103074", "BB-001", etc., use that as the article code.
+- If the shoe has a visible price tag or label, note that price.
 - Match it to the most likely article code from the list above
 - If you cannot confidently match it to any existing article, suggest:
   - A new article code in format "BB-NEW-001"
@@ -124,12 +128,12 @@ Return this exact JSON format:
   "predictedArticleCode": "BB-XXX",
   "confidence": 0.85,
   "reasoning": "Brief reason for the match",
-  "suggestedName": "Shoe Name",
+  "suggestedName": "Footwear Name",
   "suggestedPrice": 999
 }`,
     });
     const message = await anthropic.messages.create({
-        model: "claude-haiku-4-5",
+        model: "claude-sonnet-4-6",
         max_tokens: 8192,
         messages: [
             {
@@ -175,7 +179,26 @@ router.post("/stock/confirm", requireAuth, async (req, res) => {
         res.status(400).json({ error: parsed.error.message });
         return;
     }
-    const { articleCode, quantity, type: movementType, imageUrl, imageUrls, productId, name, price, purchasePrice } = parsed.data;
+    const { articleCode, quantity, type: movementType, imageUrl, imageUrls, productId, name, price, purchasePrice, supplierName, supplierId } = parsed.data;
+    // Resolve supplier: use provided ID, or find/create by name
+    let resolvedSupplierId = supplierId !== null && supplierId !== void 0 ? supplierId : null;
+    if (!resolvedSupplierId && (supplierName === null || supplierName === void 0 ? void 0 : supplierName.trim())) {
+        const trimmed = supplierName.trim();
+        const [existing] = await db.select().from(suppliersTable).where(and(eq(suppliersTable.name, trimmed), eq(suppliersTable.accountId, accountId)));
+        if (existing) {
+            resolvedSupplierId = existing.id;
+        }
+        else {
+            const [newSupplier] = await db.insert(suppliersTable).values({
+                accountId,
+                name: trimmed,
+                phone: null,
+                address: null,
+                gstin: null,
+            }).returning();
+            resolvedSupplierId = newSupplier.id;
+        }
+    }
     let product = productId
         ? (await db.select().from(productsTable).where(and(eq(productsTable.id, productId), eq(productsTable.accountId, accountId))))[0]
         : undefined;
@@ -222,6 +245,7 @@ router.post("/stock/confirm", requireAuth, async (req, res) => {
     }
     const [movement] = await db.insert(stockMovementsTable).values({
         productId: product.id,
+        supplierId: resolvedSupplierId,
         type: movementType,
         quantity,
         imageUrl: imageUrl !== null && imageUrl !== void 0 ? imageUrl : null,
@@ -240,6 +264,7 @@ router.post("/stock/confirm", requireAuth, async (req, res) => {
     });
 });
 router.post("/stock/analyze-sale", requireAuth, async (req, res) => {
+    var _a, _b;
     const accountId = req.session.accountId;
     const parsed = AnalyzeSaleImageBody.safeParse(req.body);
     if (!parsed.success) {
@@ -262,27 +287,70 @@ router.post("/stock/analyze-sale", requireAuth, async (req, res) => {
     const { imageBase64 } = parsed.data;
     const { rawBase64, mediaType } = parseBase64Image(imageBase64);
     const articleCodeList = productList.map(p => `${p.articleCode} (${p.name}, stock: ${p.currentStock})`).join("\n");
-    const message = await anthropic.messages.create({
-        model: "claude-haiku-4-5",
-        max_tokens: 8192,
-        messages: [
-            {
-                role: "user",
-                content: [
-                    { type: "image", source: { type: "base64", media_type: mediaType, data: rawBase64 } },
-                    {
-                        type: "text",
-                        text: `You are a footwear inventory assistant. Analyze this image which shows multiple footwear items that have been sold. Identify each distinct shoe/item visible and match it to the inventory list.
-
-Existing inventory:
+    // Gather reference images of known products so the AI can visually compare the
+    // sale photo against the actual catalog. This dramatically improves matching
+    // accuracy versus relying on the text article list alone.
+    const REFERENCE_IMAGE_CAP = 30;
+    const IMAGES_PER_PRODUCT = 2;
+    const storedImages = await db
+        .select({
+        productId: productImagesTable.productId,
+        imageUrl: productImagesTable.imageUrl,
+    })
+        .from(productImagesTable)
+        .innerJoin(productsTable, and(eq(productImagesTable.productId, productsTable.id), eq(productsTable.accountId, accountId)));
+    const imagesByProduct = new Map();
+    for (const row of storedImages) {
+        const list = (_a = imagesByProduct.get(row.productId)) !== null && _a !== void 0 ? _a : [];
+        if (list.length < IMAGES_PER_PRODUCT) {
+            list.push(row.imageUrl);
+            imagesByProduct.set(row.productId, list);
+        }
+    }
+    // Build the reference list, prioritising in-stock products. Fall back to the
+    // product's primary imageUrl when no extra images are stored.
+    const reference = [];
+    const prioritised = [...productList].sort((a, b) => b.currentStock - a.currentStock);
+    for (const p of prioritised) {
+        if (reference.length >= REFERENCE_IMAGE_CAP)
+            break;
+        const stored = (_b = imagesByProduct.get(p.id)) !== null && _b !== void 0 ? _b : [];
+        const candidates = stored.length > 0 ? stored : (p.imageUrl ? [p.imageUrl] : []);
+        for (const img of candidates) {
+            if (reference.length >= REFERENCE_IMAGE_CAP)
+                break;
+            reference.push({ articleCode: p.articleCode, name: p.name, image: img });
+        }
+    }
+    const content = [];
+    content.push({
+        type: "text",
+        text: `You are a footwear inventory assistant. The FIRST image below is the SALE PHOTO showing one or more footwear items that have been sold. Identify each distinct shoe/slide/chappal/sandal/boot/item visible and match it to the inventory.`,
+    });
+    content.push({ type: "image", source: { type: "base64", media_type: mediaType, data: rawBase64 } });
+    if (reference.length > 0) {
+        content.push({
+            type: "text",
+            text: `Below are REFERENCE PHOTOS of known products from the catalog. Each reference is preceded by its article code. Compare the sale photo against these reference photos to find the closest visual match (color, pattern, strap style, sole, embellishments).`,
+        });
+        for (const ref of reference) {
+            const { rawBase64: refRaw, mediaType: refMime } = parseBase64Image(ref.image);
+            content.push({ type: "text", text: `Reference — ${ref.articleCode} (${ref.name}):` });
+            content.push({ type: "image", source: { type: "base64", media_type: refMime, data: refRaw } });
+        }
+    }
+    content.push({
+        type: "text",
+        text: `Full inventory (article code, name, stock):
 ${articleCodeList || "(no products yet)"}
 
 Instructions:
-- Count each DISTINCT shoe model/style visible in the image
-- For each item, estimate the quantity of that article in the image
-- Match each item to the closest article code from the inventory list
-- If an item doesn't match any known article, use "UNKNOWN"
-- Return ONLY valid JSON, no markdown, no explanation
+- Count each DISTINCT shoe model/style visible in the SALE PHOTO.
+- For each item, prefer a visual match against the REFERENCE PHOTOS above; use the matching reference's article code.
+- If no reference photo matches, fall back to the closest article code from the inventory list by description.
+- Estimate the quantity of each matched article visible in the sale photo.
+- If an item genuinely matches nothing, use "UNKNOWN".
+- Return ONLY valid JSON, no markdown, no explanation.
 
 Return this exact JSON format:
 {
@@ -295,8 +363,14 @@ Return this exact JSON format:
     }
   ]
 }`,
-                    },
-                ],
+    });
+    const message = await anthropic.messages.create({
+        model: "claude-sonnet-4-6",
+        max_tokens: 8192,
+        messages: [
+            {
+                role: "user",
+                content,
             },
         ],
     });
@@ -409,5 +483,25 @@ router.get("/stock/movements", requireAuth, async (req, res) => {
             createdAt: m.createdAt.toISOString(),
         });
     }));
+});
+router.delete("/stock/products/:id", requireAuth, async (req, res) => {
+    const accountId = req.session.accountId;
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) {
+        res.status(400).json({ error: "Invalid product id" });
+        return;
+    }
+    const [product] = await db
+        .select()
+        .from(productsTable)
+        .where(and(eq(productsTable.id, id), eq(productsTable.accountId, accountId)));
+    if (!product) {
+        res.status(404).json({ error: "Product not found" });
+        return;
+    }
+    // product_images and stock_movements cascade on delete; invoice_items.productId
+    // is set to null, so invoice history is preserved.
+    await db.delete(productsTable).where(and(eq(productsTable.id, id), eq(productsTable.accountId, accountId)));
+    res.status(204).end();
 });
 export default router;
