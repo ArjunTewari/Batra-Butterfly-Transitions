@@ -1,0 +1,1 @@
+- [Production session cookies](prod-session-cookies.md) — login 200 then all 401 in prod = missing `app.set("trust proxy", 1)` before express-session (Replit TLS proxy + secure cookie).

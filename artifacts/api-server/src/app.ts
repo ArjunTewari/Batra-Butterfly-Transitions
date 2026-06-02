@@ -10,6 +10,10 @@ const PgSession = connectPgSimple(session);
 
 const app: Express = express();
 
+// Behind Replit's reverse proxy (TLS terminated upstream). Trust the proxy so
+// Express sees the original HTTPS protocol and will send `secure` session cookies.
+app.set("trust proxy", 1);
+
 app.use(
   pinoHttp({
     logger,
