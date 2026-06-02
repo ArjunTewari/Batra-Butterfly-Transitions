@@ -122,6 +122,8 @@ ${articleCodeList || "(no products yet)"}
 
 Instructions:
 - ${imageCount > 1 ? "Look at ALL images to get the best view of the footwear" : "Look at the footwear style, color, design, and type (shoe, chappal, slide, sandal, boot)"}
+- CRITICAL: Check for any handwritten tags, stickers, or labels on the shoe with numbers/letters. If a tag shows a code like "103074", "BB-001", etc., use that as the article code.
+- If the shoe has a visible price tag or label, note that price.
 - Match it to the most likely article code from the list above
 - If you cannot confidently match it to any existing article, suggest:
   - A new article code in format "BB-NEW-001"
@@ -140,7 +142,7 @@ Return this exact JSON format:
   });
 
   const message = await anthropic.messages.create({
-    model: "claude-haiku-4-5",
+    model: "claude-sonnet-4-6",
     max_tokens: 8192,
     messages: [
       {
@@ -308,7 +310,7 @@ router.post("/stock/analyze-sale", requireAuth, async (req, res): Promise<void> 
   const articleCodeList = productList.map(p => `${p.articleCode} (${p.name}, stock: ${p.currentStock})`).join("\n");
 
   const message = await anthropic.messages.create({
-    model: "claude-haiku-4-5",
+    model: "claude-sonnet-4-6",
     max_tokens: 8192,
     messages: [
       {

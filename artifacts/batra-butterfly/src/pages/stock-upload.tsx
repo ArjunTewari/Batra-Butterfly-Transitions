@@ -161,11 +161,21 @@ export default function StockUpload() {
             form.setValue("purchasePrice", matched.purchasePrice ?? 0);
           }
         },
-        onError: () => {
+        onError: (err: unknown) => {
+          const apiErr = err as { status?: number; message?: string };
+          if (apiErr?.status === 401) {
+            toast({
+              variant: "destructive",
+              title: "Session expired",
+              description: "Please log in again to continue.",
+            });
+            window.location.href = "/account";
+            return;
+          }
           toast({
             variant: "destructive",
             title: "Analysis failed",
-            description: "Could not identify the shoe. Please enter the article manually.",
+            description: apiErr?.message || "Could not identify the footwear. Please enter the article manually.",
           });
         },
       },
