@@ -15,6 +15,7 @@ import {
   Pressable,
   RefreshControl,
   ScrollView,
+  Share,
   StyleSheet,
   Text,
   View,
@@ -83,6 +84,62 @@ export default function InvoiceDetailScreen() {
         },
       ]
     );
+  }
+
+  function buildChallanText(inv: typeof invoice) {
+    if (!inv) return "";
+    const now = new Date(inv.date);
+    const dateStr = now.toLocaleDateString("en-IN", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+    }).replace(/\//g, "-");
+    const timeStr = now.toLocaleTimeString("en-IN", {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: true,
+    }).toUpperCase();
+    const pad = (s: string, n: number) => s.slice(0, n).padEnd(n);
+    const totalUnits = inv.items.reduce((s, i) => s + i.quantity, 0);
+
+    const header = [
+      "           ESTIMATE",
+      "=".repeat(48),
+      `Challan No : ${pad(inv.invoiceNumber, 20)} Date : ${dateStr} ( ${timeStr} )`,
+      `M/S : ${pad(inv.retailerName.toUpperCase(), 26)} Ph n : `,
+      `Addr :                                 Tran : .`,
+      "=".repeat(48),
+      `${"Description of Goods".padEnd(20)} ${"Qty.".padStart(6)} ${"Unit".padEnd(5)} ${"Price".padStart(8)} ${"Amt Rs.".padStart(9)}`,
+      "-".repeat(48),
+    ];
+
+    const itemLines = inv.items.map((item) => {
+      const name = (item.productName ?? item.articleCode).slice(0, 20).padEnd(20);
+      const qty = `${item.quantity}.00`.padStart(6);
+      const unit = "Pcs. ";
+      const price = item.unitPrice.toFixed(2).padStart(8);
+      const amount = item.totalPrice.toFixed(2).padStart(9);
+      return `${name} ${qty} ${unit} ${price} ${amount}`;
+    });
+
+    const footer = [
+      "-".repeat(48),
+      `${"".padEnd(40)} ${inv.totalAmount.toFixed(2).padStart(9)}`,
+      "",
+      `Grand Total : ${" ".repeat(8)} ${String(totalUnits).padStart(6)} Pcs. ${" ".repeat(8)} \u20B9 ${inv.totalAmount.toFixed(2).padStart(8)}`,
+      "=".repeat(48),
+      inv.notes ? `Note : ${inv.notes}` : "",
+    ].filter(Boolean);
+
+    return [...header, ...itemLines, ...footer].join("\n");
+  }
+
+  async function handleShare() {
+    if (!invoice) return;
+    const text = buildChallanText(invoice);
+    try {
+      await Share.share({ message: text, title: `Estimate – ${invoice.invoiceNumber}` });
+    } catch { /* user cancelled */ }
   }
 
   async function handleDelete() {
@@ -215,53 +272,68 @@ export default function InvoiceDetailScreen() {
         </View>
       </ScrollView>
 
-      {isDraft && (
-        <View
-          style={[
-            styles.actions,
-            {
-              borderTopColor: colors.border,
-              backgroundColor: colors.background,
-              paddingBottom: insets.bottom + 8,
-            },
-          ]}
+      <View
+        style={[
+          styles.actions,
+          {
+            borderTopColor: colors.border,
+            backgroundColor: colors.background,
+            paddingBottom: insets.bottom + 8,
+          },
+        ]}
+      >
+        {/* Share button — always visible */}
+        <Pressable
+          style={[styles.deleteBtn, { borderColor: colors.border, backgroundColor: colors.secondary }]}
+          onPress={handleShare}
         >
-          <Pressable
-            style={[styles.deleteBtn, { borderColor: colors.border, backgroundColor: colors.secondary }]}
-            onPress={handleDelete}
-            disabled={deleting}
-          >
-            {deleting ? (
-              <ActivityIndicator color={colors.destructive} size="small" />
-            ) : (
-              <Feather name="trash-2" size={20} color={colors.destructive} />
-            )}
-          </Pressable>
-          {isMaster ? (
+          <Feather name="share-2" size={20} color={colors.foreground} />
+        </Pressable>
+
+        {isDraft ? (
+          <>
             <Pressable
-              style={[styles.confirmBtn, { backgroundColor: colors.primary }]}
-              onPress={handleConfirm}
-              disabled={confirming}
+              style={[styles.deleteBtn, { borderColor: colors.border, backgroundColor: colors.secondary }]}
+              onPress={handleDelete}
+              disabled={deleting}
             >
-              {confirming ? (
-                <ActivityIndicator color={colors.primaryForeground} size="small" />
+              {deleting ? (
+                <ActivityIndicator color={colors.destructive} size="small" />
               ) : (
-                <>
-                  <Feather name="check-circle" size={20} color={colors.primaryForeground} />
-                  <Text style={[styles.confirmBtnText, { color: colors.primaryForeground }]}>
-                    Confirm Invoice
-                  </Text>
-                </>
+                <Feather name="trash-2" size={20} color={colors.destructive} />
               )}
             </Pressable>
-          ) : (
-            <View style={[styles.confirmBtn, { backgroundColor: "#f59e0b22", borderWidth: 1, borderColor: "#f59e0b44" }]}>
-              <Feather name="send" size={18} color="#f59e0b" />
-              <Text style={[styles.confirmBtnText, { color: "#f59e0b" }]}>Sent for Approval</Text>
-            </View>
-          )}
-        </View>
-      )}
+            {isMaster ? (
+              <Pressable
+                style={[styles.confirmBtn, { backgroundColor: colors.primary }]}
+                onPress={handleConfirm}
+                disabled={confirming}
+              >
+                {confirming ? (
+                  <ActivityIndicator color={colors.primaryForeground} size="small" />
+                ) : (
+                  <>
+                    <Feather name="check-circle" size={20} color={colors.primaryForeground} />
+                    <Text style={[styles.confirmBtnText, { color: colors.primaryForeground }]}>
+                      Confirm Invoice
+                    </Text>
+                  </>
+                )}
+              </Pressable>
+            ) : (
+              <View style={[styles.confirmBtn, { backgroundColor: "#f59e0b22", borderWidth: 1, borderColor: "#f59e0b44" }]}>
+                <Feather name="send" size={18} color="#f59e0b" />
+                <Text style={[styles.confirmBtnText, { color: "#f59e0b" }]}>Sent for Approval</Text>
+              </View>
+            )}
+          </>
+        ) : (
+          <View style={[styles.confirmBtn, { backgroundColor: "#22c55e22", borderWidth: 1, borderColor: "#22c55e44" }]}>
+            <Feather name="check-circle" size={18} color="#22c55e" />
+            <Text style={[styles.confirmBtnText, { color: "#22c55e" }]}>Confirmed</Text>
+          </View>
+        )}
+      </View>
     </View>
   );
 }

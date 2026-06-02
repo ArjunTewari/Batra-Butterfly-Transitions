@@ -32,7 +32,8 @@ import {
 } from "@/components/ui/select";
 import {
   ArrowLeft,
-  Image as ImageIcon,
+  Camera,
+  Images,
   RefreshCw,
   ShoppingBag,
   CheckCircle2,
@@ -60,7 +61,9 @@ export default function StockSale() {
   const [invoiceNotes, setInvoiceNotes] = useState("");
   const [invoiceConfirmed, setInvoiceConfirmed] = useState(false);
   const [confirmedInvoiceId, setConfirmedInvoiceId] = useState<number | null>(null);
+  const [confirmedInvoiceNumber, setConfirmedInvoiceNumber] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const galleryInputRef = useRef<HTMLInputElement>(null);
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
@@ -144,36 +147,53 @@ export default function StockSale() {
   }, []);
 
   const buildInvoiceText = () => {
-    const retailerName = selectedRetailer?.name ?? "—";
-    const staffName = selectedStaff?.name ?? "—";
-    const date = new Date().toLocaleDateString("en-IN", {
+    const retailerName = (selectedRetailer?.name ?? "—").toUpperCase();
+    const retailerPhone = selectedRetailer?.phone ?? "";
+    const now = new Date();
+    const dateStr = now.toLocaleDateString("en-IN", {
       day: "2-digit",
-      month: "short",
+      month: "2-digit",
       year: "numeric",
+    }).replace(/\//g, "-");
+    const timeStr = now.toLocaleTimeString("en-IN", {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: true,
+    }).toUpperCase();
+    const challanNo = confirmedInvoiceNumber ?? generateInvoiceNumber();
+
+    const pad = (s: string, n: number) => s.slice(0, n).padEnd(n);
+
+    const header = [
+      "           ESTIMATE",
+      "=".repeat(48),
+      `Challan No : ${pad(challanNo, 20)} Date : ${dateStr} ( ${timeStr} )`,
+      `M/S : ${pad(retailerName, 26)} Ph n : ${retailerPhone}`,
+      `Addr :                                 Tran : .`,
+      "=".repeat(48),
+      `${"Description of Goods".padEnd(20)} ${"Qty.".padStart(6)} ${"Unit".padEnd(5)} ${"Price".padStart(8)} ${"Amount Rs.".padStart(10)}`,
+      "-".repeat(48),
+    ];
+
+    const itemLines = validItems.map((item) => {
+      const name = (item.matchedProduct?.name ?? item.articleCode).slice(0, 20).padEnd(20);
+      const qty = `${item.quantity}.00`.padStart(6);
+      const unit = "Pcs. ";
+      const price = item.matchedProduct?.price.toFixed(2).padStart(8) ?? "      0.00";
+      const amount = (item.quantity * (item.matchedProduct?.price ?? 0)).toFixed(2).padStart(10);
+      return `${name} ${qty} ${unit} ${price} ${amount}`;
     });
-    const lines = validItems.map(
-      (item) =>
-        `  ${item.matchedProduct?.name ?? item.articleCode} (${item.articleCode}) x${item.quantity}  @${formatCurrency(item.matchedProduct?.price ?? 0)}  =  ${formatCurrency(item.quantity * (item.matchedProduct?.price ?? 0))}`
-    );
-    return [
-      "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
-      "       BATRA BUTTERFLY",
-      "         SALE INVOICE",
-      "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
-      `Date     : ${date}`,
-      `Retailer : ${retailerName}`,
-      `Staff    : ${staffName}`,
-      "────────────────────────────────",
-      "ITEMS:",
-      ...lines,
-      "────────────────────────────────",
-      `TOTAL    : ${formatCurrency(totalAmount)}`,
-      `Units    : ${totalUnits}`,
-      invoiceNotes ? `Notes    : ${invoiceNotes}` : "",
-      "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
-    ]
-      .filter(Boolean)
-      .join("\n");
+
+    const footer = [
+      "-".repeat(48),
+      `${"".padEnd(40)} ${totalAmount.toFixed(2).padStart(10)}`,
+      "",
+      `Grand Total : ${" ".repeat(8)} ${String(totalUnits).padStart(6)} Pcs. ${" ".repeat(8)} \u20B9 ${totalAmount.toFixed(2).padStart(8)}`,
+      "=".repeat(48),
+      invoiceNotes ? `Note : ${invoiceNotes}` : "",
+    ].filter(Boolean);
+
+    return [...header, ...itemLines, ...footer].join("\n");
   };
 
   const handleCopy = async () => {
@@ -269,6 +289,7 @@ export default function StockSale() {
               onSuccess: () => {
                 setInvoiceConfirmed(true);
                 setConfirmedInvoiceId(invoice.id);
+                setConfirmedInvoiceNumber(invoiceNumber);
                 toast({
                   title: "Invoice created & confirmed",
                   description: `Invoice ${invoiceNumber} posted. Stock deducted and ${selectedRetailer?.name}'s account updated.`,
@@ -307,7 +328,9 @@ export default function StockSale() {
     setInvoiceNotes("");
     setInvoiceConfirmed(false);
     setConfirmedInvoiceId(null);
+    setConfirmedInvoiceNumber(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
+    if (galleryInputRef.current) galleryInputRef.current.value = "";
   };
 
   const isCreatingInvoice = createInvoice.isPending || confirmInvoice.isPending;
@@ -335,36 +358,35 @@ export default function StockSale() {
             </CardDescription>
           </CardHeader>
           <CardContent>
+            {/* Hidden inputs */}
+            <input
+              type="file"
+              accept="image/*"
+              capture="environment"
+              className="hidden"
+              ref={fileInputRef}
+              onChange={handleImageUpload}
+            />
+            <input
+              type="file"
+              accept="image/*"
+              className="hidden"
+              ref={galleryInputRef}
+              onChange={handleImageUpload}
+            />
+
             <div
-              className={`relative border-2 border-dashed rounded-lg overflow-hidden transition-all flex flex-col items-center justify-center min-h-[260px] cursor-pointer
-                ${imagePreview ? "border-white/20" : "border-white/10 hover:border-white/30 bg-white/[0.02]"}`}
-              onClick={() => fileInputRef.current?.click()}
+              className={`relative border-2 border-dashed rounded-lg overflow-hidden transition-all flex flex-col items-center justify-center min-h-[200px]
+                ${imagePreview ? "border-white/20" : "border-white/10 bg-white/[0.02]"}`}
             >
-              <input
-                type="file"
-                accept="image/*"
-                capture="environment"
-                className="hidden"
-                ref={fileInputRef}
-                onChange={handleImageUpload}
-              />
               <AnimatePresence mode="wait">
                 {imagePreview ? (
                   <motion.div key="preview" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 w-full h-full">
                     <img src={imagePreview} alt="Sale items" className="w-full h-full object-contain p-2" />
-                    <div className="absolute inset-0 bg-black/40 opacity-0 hover:opacity-100 transition-opacity flex items-center justify-center">
-                      <Button variant="secondary" className="pointer-events-none">
-                        <RefreshCw className="mr-2 h-4 w-4" /> Retake Photo
-                      </Button>
-                    </div>
                   </motion.div>
                 ) : (
                   <motion.div key="placeholder" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex flex-col items-center justify-center p-6 text-center">
-                    <div className="h-16 w-16 rounded-full bg-white/5 flex items-center justify-center mb-4">
-                      <ImageIcon className="h-8 w-8 text-gray-400" />
-                    </div>
-                    <p className="text-lg font-medium text-white mb-2">Tap to Take Photo</p>
-                    <p className="text-sm text-gray-500">Capture all sold items in one shot</p>
+                    <p className="text-sm text-gray-500">Photo will appear here after upload</p>
                   </motion.div>
                 )}
               </AnimatePresence>
@@ -374,6 +396,26 @@ export default function StockSale() {
                   <p className="text-white font-medium">Detecting items with AI...</p>
                 </div>
               )}
+            </div>
+
+            {/* Camera / Gallery buttons */}
+            <div className="flex gap-2 mt-3">
+              <Button
+                variant="outline"
+                className="flex-1 border-white/10 text-white hover:bg-white/5"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={analyzeSale.isPending}
+              >
+                <Camera className="mr-2 h-4 w-4" /> Camera
+              </Button>
+              <Button
+                variant="outline"
+                className="flex-1 border-white/10 text-white hover:bg-white/5"
+                onClick={() => galleryInputRef.current?.click()}
+                disabled={analyzeSale.isPending}
+              >
+                <Images className="mr-2 h-4 w-4" /> Gallery
+              </Button>
             </div>
 
             {items.length > 0 && (
