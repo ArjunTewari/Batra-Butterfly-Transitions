@@ -43,6 +43,7 @@ app.use(session({
     conString: process.env["DATABASE_URL"],
     tableName: "sessions",
     createTableIfMissing: true,
+    ttl: 7 * 24 * 60 * 60, // 7 days in seconds
   }),
   secret: process.env["SESSION_SECRET"] ?? "bb-dev-secret-change-in-prod",
   name: "bb.sid",
@@ -52,7 +53,7 @@ app.use(session({
     httpOnly: true,
     secure: process.env["NODE_ENV"] === "production",
     sameSite: process.env["NODE_ENV"] === "production" ? "none" : "lax",
-    maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
+    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
   },
 }));
 
