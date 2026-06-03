@@ -1,0 +1,975 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Batra Butterfly vs BUSY Accounting Software</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: #fff;
+      color: #111;
+      line-height: 1.6;
+    }
+
+    /* ── Cover Page ── */
+    .cover {
+      min-height: 100vh;
+      background: linear-gradient(135deg, #000 0%, #1a1a1a 60%, #111 100%);
+      color: #fff;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      text-align: center;
+      padding: 60px 40px;
+      page-break-after: always;
+    }
+
+    .cover-badge {
+      display: inline-block;
+      background: rgba(255,255,255,0.08);
+      border: 1px solid rgba(255,255,255,0.15);
+      border-radius: 50px;
+      padding: 6px 20px;
+      font-size: 12px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: #aaa;
+      margin-bottom: 32px;
+    }
+
+    .cover h1 {
+      font-size: clamp(36px, 6vw, 64px);
+      font-weight: 800;
+      letter-spacing: -1px;
+      line-height: 1.1;
+      margin-bottom: 12px;
+    }
+
+    .cover h1 span { color: #f0c040; }
+
+    .cover .subtitle {
+      font-size: 18px;
+      color: #888;
+      margin-bottom: 48px;
+      max-width: 540px;
+    }
+
+    .cover-vs {
+      display: flex;
+      align-items: center;
+      gap: 32px;
+      margin-bottom: 60px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+
+    .cover-product {
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 16px;
+      padding: 20px 36px;
+      min-width: 180px;
+    }
+
+    .cover-product.winner {
+      background: rgba(240,192,64,0.12);
+      border-color: rgba(240,192,64,0.4);
+    }
+
+    .cover-product .label { font-size: 10px; color: #666; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 4px; }
+    .cover-product .name { font-size: 20px; font-weight: 700; }
+    .cover-product.winner .name { color: #f0c040; }
+
+    .vs-circle {
+      width: 52px; height: 52px;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(255,255,255,0.1);
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 800; font-size: 16px; color: #555;
+      flex-shrink: 0;
+    }
+
+    .cover-meta {
+      color: #555;
+      font-size: 13px;
+    }
+
+    /* ── Page layout ── */
+    .page {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 64px 48px;
+    }
+
+    /* ── Section headers ── */
+    .section-label {
+      font-size: 11px;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      color: #999;
+      margin-bottom: 8px;
+    }
+
+    h2.section-title {
+      font-size: 32px;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+      margin-bottom: 40px;
+      line-height: 1.2;
+    }
+
+    h2.section-title span { color: #c9973a; }
+
+    /* ── Executive summary ── */
+    .summary-box {
+      background: #f8f8f8;
+      border-left: 4px solid #000;
+      border-radius: 0 12px 12px 0;
+      padding: 24px 28px;
+      margin-bottom: 40px;
+      font-size: 15px;
+      color: #333;
+      line-height: 1.7;
+    }
+
+    /* ── Scoreboard ── */
+    .scoreboard {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 1px;
+      background: #e5e5e5;
+      border: 1px solid #e5e5e5;
+      border-radius: 16px;
+      overflow: hidden;
+      margin-bottom: 56px;
+    }
+
+    .score-cell {
+      background: #fff;
+      padding: 28px 24px;
+      text-align: center;
+    }
+
+    .score-cell.highlight { background: #000; color: #fff; }
+    .score-cell .metric { font-size: 12px; color: #999; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 1px; }
+    .score-cell.highlight .metric { color: #666; }
+    .score-cell .value { font-size: 36px; font-weight: 800; line-height: 1; }
+    .score-cell.winner .value { color: #16a34a; }
+    .score-cell.loser .value { color: #dc2626; }
+    .score-cell.highlight .value { color: #fff; }
+    .score-cell .sub { font-size: 11px; color: #aaa; margin-top: 4px; }
+    .score-cell.highlight .sub { color: #555; }
+
+    /* ── Feature grid ── */
+    .feature-section { margin-bottom: 56px; }
+
+    .feature-section h3 {
+      font-size: 20px;
+      font-weight: 700;
+      margin-bottom: 20px;
+      padding-bottom: 12px;
+      border-bottom: 2px solid #f0f0f0;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .feature-section h3 .icon {
+      width: 32px; height: 32px;
+      border-radius: 8px;
+      background: #000;
+      color: #fff;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+      flex-shrink: 0;
+    }
+
+    .comparison-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 14px;
+    }
+
+    .comparison-table th {
+      padding: 12px 16px;
+      text-align: left;
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: #666;
+      border-bottom: 2px solid #e5e5e5;
+    }
+
+    .comparison-table th:nth-child(2),
+    .comparison-table th:nth-child(3) { text-align: center; }
+
+    .comparison-table td {
+      padding: 13px 16px;
+      border-bottom: 1px solid #f0f0f0;
+      vertical-align: top;
+    }
+
+    .comparison-table tr:last-child td { border-bottom: none; }
+
+    .comparison-table td:nth-child(2),
+    .comparison-table td:nth-child(3) { text-align: center; }
+
+    .comparison-table td:nth-child(1) { font-weight: 500; color: #222; }
+    .comparison-table td:nth-child(1) small { display: block; font-weight: 400; color: #888; font-size: 12px; margin-top: 2px; }
+
+    .yes { color: #16a34a; font-size: 18px; font-weight: 700; }
+    .no { color: #dc2626; font-size: 18px; font-weight: 700; }
+    .partial { color: #d97706; font-size: 13px; font-weight: 600; }
+
+    .comparison-table tbody tr:hover td { background: #fafafa; }
+
+    /* ── Key advantages ── */
+    .advantages-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+      margin-bottom: 56px;
+    }
+
+    .advantage-card {
+      border: 1px solid #e5e5e5;
+      border-radius: 16px;
+      padding: 24px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .advantage-card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0;
+      width: 4px; height: 100%;
+      background: #000;
+    }
+
+    .advantage-card .num {
+      font-size: 11px;
+      font-weight: 700;
+      color: #bbb;
+      letter-spacing: 2px;
+      margin-bottom: 8px;
+    }
+
+    .advantage-card h4 {
+      font-size: 16px;
+      font-weight: 700;
+      margin-bottom: 8px;
+      color: #111;
+    }
+
+    .advantage-card p {
+      font-size: 13px;
+      color: #555;
+      line-height: 1.6;
+    }
+
+    .advantage-card .tag {
+      display: inline-block;
+      margin-top: 12px;
+      background: #000;
+      color: #fff;
+      font-size: 10px;
+      padding: 3px 10px;
+      border-radius: 50px;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+    }
+
+    /* ── Verdict ── */
+    .verdict {
+      background: #000;
+      color: #fff;
+      border-radius: 20px;
+      padding: 48px;
+      margin-bottom: 56px;
+      text-align: center;
+    }
+
+    .verdict .trophy { font-size: 48px; margin-bottom: 16px; }
+    .verdict h3 { font-size: 28px; font-weight: 800; margin-bottom: 12px; }
+    .verdict p { font-size: 15px; color: #aaa; max-width: 560px; margin: 0 auto; line-height: 1.7; }
+
+    .verdict .chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      justify-content: center;
+      margin-top: 24px;
+    }
+
+    .verdict .chip {
+      background: rgba(255,255,255,0.08);
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 50px;
+      padding: 6px 16px;
+      font-size: 12px;
+      color: #ddd;
+    }
+
+    /* ── Feature deep-dive ── */
+    .deep-dive { margin-bottom: 48px; }
+    .deep-dive h3 {
+      font-size: 22px; font-weight: 700; margin-bottom: 16px;
+      display: flex; align-items: center; gap: 10px;
+    }
+
+    .deep-dive-body {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+
+    .busy-side {
+      background: #fff5f5;
+      border: 1px solid #fecaca;
+      border-radius: 12px;
+      padding: 20px;
+    }
+
+    .bb-side {
+      background: #f0fdf4;
+      border: 1px solid #bbf7d0;
+      border-radius: 12px;
+      padding: 20px;
+    }
+
+    .side-label {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      margin-bottom: 12px;
+    }
+
+    .busy-side .side-label { color: #dc2626; }
+    .bb-side .side-label { color: #16a34a; }
+
+    .side-points li {
+      font-size: 13px;
+      color: #444;
+      padding: 4px 0;
+      padding-left: 18px;
+      position: relative;
+      list-style: none;
+    }
+
+    .busy-side .side-points li::before { content: '✗'; position: absolute; left: 0; color: #dc2626; font-weight: 700; }
+    .bb-side .side-points li::before { content: '✓'; position: absolute; left: 0; color: #16a34a; font-weight: 700; }
+
+    /* ── Print ── */
+    @media print {
+      .cover { min-height: auto; padding: 48px; }
+      .page { padding: 40px 32px; }
+      .advantages-grid { grid-template-columns: 1fr 1fr; }
+    }
+
+    /* ── Page break helpers ── */
+    .page-break { page-break-before: always; }
+    .no-break { page-break-inside: avoid; }
+  </style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════════════ COVER PAGE -->
+<div class="cover">
+  <div class="cover-badge">Competitive Analysis · 2026</div>
+  <h1>Batra Butterfly<br><span>vs BUSY</span></h1>
+  <p class="subtitle">Why a purpose-built footwear business platform outperforms a generic accounting suite</p>
+
+  <div class="cover-vs">
+    <div class="cover-product winner">
+      <div class="label">Challenger</div>
+      <div class="name">🦋 Batra Butterfly</div>
+    </div>
+    <div class="vs-circle">VS</div>
+    <div class="cover-product">
+      <div class="label">Incumbent</div>
+      <div class="name">BUSY Accounting</div>
+    </div>
+  </div>
+
+  <div class="cover-meta">Prepared for internal use · Batra Footwear Distribution · June 2026</div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════ PAGE 1 -->
+<div class="page">
+
+  <p class="section-label">Executive Summary</p>
+  <h2 class="section-title">Why Batra Butterfly <span>Wins</span></h2>
+
+  <div class="summary-box">
+    BUSY Accounting Software is a general-purpose accounting tool built for any business. Batra Butterfly is built
+    <em>specifically</em> for a footwear distribution business — with AI-powered stock management, face-scan staff attendance,
+    real-time retailer analytics, PDF estimate generation, and a full mobile companion app. Where BUSY forces your team to
+    adapt to generic accounting workflows, Batra Butterfly adapts to <strong>how your business actually works</strong>.
+  </div>
+
+  <!-- Scoreboard -->
+  <div class="scoreboard no-break">
+    <div class="score-cell">
+      <div class="metric">Platform</div>
+      <div class="value" style="font-size:18px;padding-top:4px;">Desktop Only</div>
+      <div class="sub">BUSY Accounting</div>
+    </div>
+    <div class="score-cell highlight">
+      <div class="metric">Batra Butterfly</div>
+      <div class="value">18</div>
+      <div class="sub">exclusive features BUSY lacks</div>
+    </div>
+    <div class="score-cell">
+      <div class="metric">Platform</div>
+      <div class="value" style="font-size:18px;padding-top:4px;">Web + Mobile</div>
+      <div class="sub">Batra Butterfly</div>
+    </div>
+  </div>
+
+  <!-- Feature comparison tables -->
+  <div class="feature-section no-break">
+    <h3><span class="icon">🤖</span> Artificial Intelligence</h3>
+    <table class="comparison-table">
+      <thead>
+        <tr>
+          <th>Feature</th>
+          <th>BUSY</th>
+          <th>Batra Butterfly</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Photo-based stock management<small>Take a photo → AI reads article code → updates inventory</small></td>
+          <td><span class="no">✗</span></td>
+          <td><span class="yes">✓</span></td>
+        </tr>
+        <tr>
+          <td>AI article code suggestion<small>Suggests matching products from uploaded photo</small></td>
+          <td><span class="no">✗</span></td>
+          <td><span class="yes">✓</span></td>
+        </tr>
+        <tr>
+          <td>Face-scan staff attendance<small>Camera-based biometric clock-in with auto-matching</small></td>
+          <td><span class="no">✗</span></td>
+          <td><span class="yes">✓</span></td>
+        </tr>
+        <tr>
+          <td>Under-buying retailer alerts<small>Detects retailers buying below historical trend</small></td>
+          <td><span class="no">✗</span></td>
+          <td><span class="yes">✓</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="feature-section no-break">
+    <h3><span class="icon">📊</span> Analytics &amp; Reporting</h3>
+    <table class="comparison-table">
+      <thead>
+        <tr>
+          <th>Feature</th>
+          <th>BUSY</th>
+          <th>Batra Butterfly</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Live sales dashboard<small>Real-time KPIs, daily totals, activity feed</small></td>
+          <td><span class="partial">Basic</span></td>
+          <td><span class="yes">✓</span></td>
+        </tr>
+        <tr>
+          <td>Retailer growth rate tracking<small>Month-over-month purchase trend per retailer</small></td>
+          <td><span class="no">✗</span></td>
+          <td><span class="yes">✓</span></td>
+        </tr>
+        <tr>
+          <td>Top retailer leaderboard</td>
+          <td><span class="no">✗</span></td>
+          <td><span class="yes">✓</span></td>
+        </tr>
+        <tr>
+          <td>Staff sales performance leaderboard</td>
+          <td><span class="no">✗</span></td>
+          <td><span class="yes">✓</span></td>
+        </tr>
+        <tr>
+          <td>Monthly analytics with trend charts</td>
+          <td><span class="partial">Reports only</span></td>
+          <td><span class="yes">✓</span></td>
+        </tr>
+        <tr>
+          <td>Under-performing retailer detection</td>
+          <td><span class="no">✗</span></td>
+          <td><span class="yes">✓</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+</div>
+
+<!-- ═══════════════════════════════════════════════════════ PAGE 2 -->
+<div class="page page-break">
+
+  <div class="feature-section no-break">
+    <h3><span class="icon">📱</span> Access &amp; Mobility</h3>
+    <table class="comparison-table">
+      <thead>
+        <tr><th>Feature</th><th>BUSY</th><th>Batra Butterfly</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Mobile app (Android &amp; iOS)<small>Full native mobile companion with all core features</small></td>
+          <td><span class="no">✗</span></td>
+          <td><span class="yes">✓</span></td>
+        </tr>
+        <tr>
+          <td>Browser-based (no installation)<small>Works on any device, any browser, anywhere</small></td>
+          <td><span class="no">✗</span></td>
+          <td><span class="yes">✓</span></td>
+        </tr>
+        <tr>
+          <td>Cloud access from multiple locations</td>
+          <td><span class="partial">Add-on only</span></td>
+          <td><span class="yes">✓</span></td>
+        </tr>
+        <tr>
+          <td>Windows-only desktop requirement</td>
+          <td><span class="no">Required</span></td>
+          <td><span class="yes">Not needed</span></td>
+        </tr>
+        <tr>
+          <td>Works on tablet / iPad</td>
+          <td><span class="no">✗</span></td>
+          <td><span class="yes">✓</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="feature-section no-break">
+    <h3><span class="icon">👥</span> Staff &amp; HR Management</h3>
+    <table class="comparison-table">
+      <thead>
+        <tr><th>Feature</th><th>BUSY</th><th>Batra Butterfly</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Face-scan daily attendance<small>Biometric check-in matched against enrolled staff photo</small></td>
+          <td><span class="no">✗</span></td>
+          <td><span class="yes">✓</span></td>
+        </tr>
+        <tr>
+          <td>Attendance history &amp; monthly summary</td>
+          <td><span class="no">✗</span></td>
+          <td><span class="yes">✓</span></td>
+        </tr>
+        <tr>
+          <td>Staff salary overview (earnings / net payable)</td>
+          <td><span class="partial">Basic payroll</span></td>
+          <td><span class="yes">✓</span></td>
+        </tr>
+        <tr>
+          <td>Loan tracking per staff member</td>
+          <td><span class="no">✗</span></td>
+          <td><span class="yes">✓</span></td>
+        </tr>
+        <tr>
+          <td>Payment clearance with master approval workflow<small>Staff requests → master approves → retailer debited</small></td>
+          <td><span class="no">✗</span></td>
+          <td><span class="yes">✓</span></td>
+        </tr>
+        <tr>
+          <td>Sales performance leaderboard</td>
+          <td><span class="no">✗</span></td>
+          <td><span class="yes">✓</span></td>
+        </tr>
+        <tr>
+          <td>Role-based access (master vs staff)</td>
+          <td><span class="partial">Limited</span></td>
+          <td><span class="yes">✓</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="feature-section no-break">
+    <h3><span class="icon">💳</span> Retailer Credit &amp; Ledger</h3>
+    <table class="comparison-table">
+      <thead>
+        <tr><th>Feature</th><th>BUSY</th><th>Batra Butterfly</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Per-retailer credit limit &amp; outstanding balance</td>
+          <td><span class="partial">Manual</span></td>
+          <td><span class="yes">✓ Auto-computed</span></td>
+        </tr>
+        <tr>
+          <td>Overdue balance detection</td>
+          <td><span class="partial">Via reports</span></td>
+          <td><span class="yes">✓ Real-time</span></td>
+        </tr>
+        <tr>
+          <td>Full transaction ledger per retailer</td>
+          <td><span class="yes">✓</span></td>
+          <td><span class="yes">✓</span></td>
+        </tr>
+        <tr>
+          <td>One-tap payment recording</td>
+          <td><span class="partial">Multi-step</span></td>
+          <td><span class="yes">✓ Single screen</span></td>
+        </tr>
+        <tr>
+          <td>Vendor payment clearance (retailer → vendor)</td>
+          <td><span class="partial">Separate journal</span></td>
+          <td><span class="yes">✓ Built-in flow</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+</div>
+
+<!-- ═══════════════════════════════════════════════════════ PAGE 3 -->
+<div class="page page-break">
+
+  <div class="feature-section no-break">
+    <h3><span class="icon">🧾</span> Invoicing &amp; Stock</h3>
+    <table class="comparison-table">
+      <thead>
+        <tr><th>Feature</th><th>BUSY</th><th>Batra Butterfly</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Invoice (Estimate/Challan) generation</td>
+          <td><span class="yes">✓</span></td>
+          <td><span class="yes">✓</span></td>
+        </tr>
+        <tr>
+          <td>PDF estimate matching physical challan format<small>Challan No, M/S, Qty, Unit, Price, Grand Total</small></td>
+          <td><span class="partial">Fixed template</span></td>
+          <td><span class="yes">✓ Custom format</span></td>
+        </tr>
+        <tr>
+          <td>Extra charges on invoice (GST, Misc, Packing, Claim, Cash Deposit)</td>
+          <td><span class="partial">Manual entries</span></td>
+          <td><span class="yes">✓ Checkbox-based</span></td>
+        </tr>
+        <tr>
+          <td>AI photo-based stock update<small>Photo → article code → confirm → stock updated</small></td>
+          <td><span class="no">✗</span></td>
+          <td><span class="yes">✓</span></td>
+        </tr>
+        <tr>
+          <td>Real-time stock levels</td>
+          <td><span class="yes">✓</span></td>
+          <td><span class="yes">✓</span></td>
+        </tr>
+        <tr>
+          <td>Auto stock deduction on invoice confirm</td>
+          <td><span class="yes">✓</span></td>
+          <td><span class="yes">✓</span></td>
+        </tr>
+        <tr>
+          <td>Invoice + stock linked to retailer ledger (single flow)</td>
+          <td><span class="partial">Separate modules</span></td>
+          <td><span class="yes">✓ Unified</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="feature-section no-break">
+    <h3><span class="icon">🏪</span> Supplier Management</h3>
+    <table class="comparison-table">
+      <thead>
+        <tr><th>Feature</th><th>BUSY</th><th>Batra Butterfly</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Supplier directory &amp; profiles</td>
+          <td><span class="yes">✓</span></td>
+          <td><span class="yes">✓</span></td>
+        </tr>
+        <tr>
+          <td>Supplier bills &amp; payment tracking</td>
+          <td><span class="yes">✓</span></td>
+          <td><span class="yes">✓</span></td>
+        </tr>
+        <tr>
+          <td>Retailer-to-vendor payment clearance flow</td>
+          <td><span class="no">✗</span></td>
+          <td><span class="yes">✓</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="feature-section no-break">
+    <h3><span class="icon">🎨</span> User Experience</h3>
+    <table class="comparison-table">
+      <thead>
+        <tr><th>Feature</th><th>BUSY</th><th>Batra Butterfly</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Modern, clean UI<small>Black-on-white design vs legacy Windows interface</small></td>
+          <td><span class="no">Windows UI</span></td>
+          <td><span class="yes">✓ Modern</span></td>
+        </tr>
+        <tr>
+          <td>Animations &amp; smooth transitions</td>
+          <td><span class="no">✗</span></td>
+          <td><span class="yes">✓ Framer Motion</span></td>
+        </tr>
+        <tr>
+          <td>Works without training / accounting background</td>
+          <td><span class="no">Steep learning curve</span></td>
+          <td><span class="yes">✓ Intuitive</span></td>
+        </tr>
+        <tr>
+          <td>Dark mode interface</td>
+          <td><span class="no">✗</span></td>
+          <td><span class="yes">✓</span></td>
+        </tr>
+        <tr>
+          <td>Indian Rupee (₹) formatting throughout</td>
+          <td><span class="yes">✓</span></td>
+          <td><span class="yes">✓</span></td>
+        </tr>
+        <tr>
+          <td>Built specifically for footwear distribution</td>
+          <td><span class="no">✗ Generic</span></td>
+          <td><span class="yes">✓ Purpose-built</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+</div>
+
+<!-- ═══════════════════════════════════════════════════════ PAGE 4 -->
+<div class="page page-break">
+
+  <p class="section-label">Exclusive Advantages</p>
+  <h2 class="section-title">Features Only <span>Batra Butterfly</span> Has</h2>
+
+  <div class="advantages-grid">
+    <div class="advantage-card no-break">
+      <div class="num">01</div>
+      <h4>AI Photo Stock Management</h4>
+      <p>Point your phone camera at a box or product, and the AI automatically reads the article code and suggests a stock update. Confirm with one tap. BUSY has no image processing capability whatsoever.</p>
+      <span class="tag">Unique to Batra Butterfly</span>
+    </div>
+
+    <div class="advantage-card no-break">
+      <div class="num">02</div>
+      <h4>Face-Scan Attendance</h4>
+      <p>Staff clock in daily using face recognition — no punching cards, no proxies. The system matches the live camera feed against enrolled face descriptors in real time and logs attendance automatically.</p>
+      <span class="tag">Unique to Batra Butterfly</span>
+    </div>
+
+    <div class="advantage-card no-break">
+      <div class="num">03</div>
+      <h4>Native Mobile App</h4>
+      <p>A full-featured companion app for Android and iOS built with Expo/React Native. Staff can create invoices, scan stock, mark attendance, and view their performance — all from their phone in the field.</p>
+      <span class="tag">Unique to Batra Butterfly</span>
+    </div>
+
+    <div class="advantage-card no-break">
+      <div class="num">04</div>
+      <h4>Payment Clearance Approval Workflow</h4>
+      <p>Any staff member can submit a payment clearance request. It sits in a "Pending" queue and only deducts from the retailer's ledger after the master explicitly approves it — preventing accidental or fraudulent entries.</p>
+      <span class="tag">Unique to Batra Butterfly</span>
+    </div>
+
+    <div class="advantage-card no-break">
+      <div class="num">05</div>
+      <h4>Retailer Under-Buying Alerts</h4>
+      <p>The analytics engine monitors each retailer's purchase history and flags those whose recent buying has dropped below their historical average — giving you actionable data to reach out before losing a client.</p>
+      <span class="tag">Unique to Batra Butterfly</span>
+    </div>
+
+    <div class="advantage-card no-break">
+      <div class="num">06</div>
+      <h4>Challan-Format PDF Estimates</h4>
+      <p>Invoices export as PDF estimates in the exact format your physical challans use — Challan No, M/S, date, item rows, grand total. Staff can view online or download a file they send directly to the retailer.</p>
+      <span class="tag">Unique to Batra Butterfly</span>
+    </div>
+
+    <div class="advantage-card no-break">
+      <div class="num">07</div>
+      <h4>Staff Loans &amp; HR Overview</h4>
+      <p>Track advance loans per staff member, compute net payable salary (earnings minus deductions minus active loans), and record payment history — all in a single staff detail page, without needing a separate payroll module.</p>
+      <span class="tag">Unique to Batra Butterfly</span>
+    </div>
+
+    <div class="advantage-card no-break">
+      <div class="num">08</div>
+      <h4>Real-Time Retailer Growth Tracking</h4>
+      <p>Month-over-month and year-over-year purchase growth rates computed per retailer. The top-retailer dashboard ranks customers by sales volume, purchase frequency, and average order value.</p>
+      <span class="tag">Unique to Batra Butterfly</span>
+    </div>
+  </div>
+
+  <!-- Deep-dive comparison -->
+  <p class="section-label">Head to Head</p>
+  <h2 class="section-title">Where BUSY Falls <span>Short</span></h2>
+
+  <div class="deep-dive no-break">
+    <h3>📦 Stock Management</h3>
+    <div class="deep-dive-body">
+      <div class="busy-side">
+        <div class="side-label">BUSY Accounting</div>
+        <ul class="side-points">
+          <li>Manual item code entry required</li>
+          <li>No photo-based identification</li>
+          <li>Desktop-only updates</li>
+          <li>No AI assistance</li>
+          <li>Multiple screens to complete a stock-in</li>
+        </ul>
+      </div>
+      <div class="bb-side">
+        <div class="side-label">Batra Butterfly</div>
+        <ul class="side-points">
+          <li>Upload photo of product/box</li>
+          <li>AI reads and suggests article code</li>
+          <li>Confirm in one tap — stock updated</li>
+          <li>Available on web and mobile</li>
+          <li>Full movement history with photo evidence</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <div class="deep-dive no-break">
+    <h3>👨‍💼 Staff Attendance</h3>
+    <div class="deep-dive-body">
+      <div class="busy-side">
+        <div class="side-label">BUSY Accounting</div>
+        <ul class="side-points">
+          <li>No attendance tracking module</li>
+          <li>No biometric integration</li>
+          <li>No attendance-to-salary linkage</li>
+          <li>Requires third-party software</li>
+        </ul>
+      </div>
+      <div class="bb-side">
+        <div class="side-label">Batra Butterfly</div>
+        <ul class="side-points">
+          <li>Face-scan daily attendance (camera only)</li>
+          <li>Manual mark override (present/half/absent)</li>
+          <li>Monthly attendance summary per staff</li>
+          <li>Linked to salary and payable calculations</li>
+          <li>No additional hardware needed</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <div class="deep-dive no-break">
+    <h3>📱 Platform Access</h3>
+    <div class="deep-dive-body">
+      <div class="busy-side">
+        <div class="side-label">BUSY Accounting</div>
+        <ul class="side-points">
+          <li>Requires Windows PC installation</li>
+          <li>No mobile app</li>
+          <li>Cloud access only as paid add-on</li>
+          <li>Cannot use from phone or tablet</li>
+          <li>Tied to office location</li>
+        </ul>
+      </div>
+      <div class="bb-side">
+        <div class="side-label">Batra Butterfly</div>
+        <ul class="side-points">
+          <li>Fully browser-based — no installation</li>
+          <li>Native mobile app (Android &amp; iOS)</li>
+          <li>Cloud-hosted, works from anywhere</li>
+          <li>Optimised for phone and tablet</li>
+          <li>Real-time sync across all devices</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ═══════════════════════════════════════════════════════ VERDICT -->
+<div class="page page-break">
+
+  <div class="verdict">
+    <div class="trophy">🏆</div>
+    <h3>Verdict: Batra Butterfly</h3>
+    <p>
+      BUSY is a competent accounting tool for a generic business. But running a footwear distribution operation demands
+      something that speaks your language — retailer credit cycles, stock challans, field staff, vendor payments, and
+      daily cash flow. Batra Butterfly does all of that, plus adds AI and mobile capabilities that BUSY may never build.
+    </p>
+    <div class="chips">
+      <span class="chip">AI-Powered</span>
+      <span class="chip">Mobile-First</span>
+      <span class="chip">Face Attendance</span>
+      <span class="chip">Cloud-Native</span>
+      <span class="chip">Footwear-Specific</span>
+      <span class="chip">PDF Estimates</span>
+      <span class="chip">Real-Time Analytics</span>
+      <span class="chip">Master Approval Flows</span>
+    </div>
+  </div>
+
+  <!-- Final feature count -->
+  <p class="section-label">Summary Count</p>
+  <h2 class="section-title">Feature <span>Scorecard</span></h2>
+
+  <div class="scoreboard no-break" style="grid-template-columns:1fr 1fr 1fr 1fr;margin-bottom:48px;">
+    <div class="score-cell winner">
+      <div class="metric">Batra Butterfly</div>
+      <div class="value">✓ 32+</div>
+      <div class="sub">features available</div>
+    </div>
+    <div class="score-cell loser">
+      <div class="metric">BUSY Missing</div>
+      <div class="value">18</div>
+      <div class="sub">features not present</div>
+    </div>
+    <div class="score-cell">
+      <div class="metric">AI Features</div>
+      <div class="value" style="color:#7c3aed;">4</div>
+      <div class="sub">BB exclusive</div>
+    </div>
+    <div class="score-cell">
+      <div class="metric">Platforms</div>
+      <div class="value" style="color:#0369a1;">3</div>
+      <div class="sub">Web, iOS, Android</div>
+    </div>
+  </div>
+
+  <div class="summary-box" style="border-left-color:#16a34a;background:#f0fdf4;">
+    <strong>Bottom line:</strong> Switching to Batra Butterfly means your team works from their phones, stock gets updated
+    from photos, attendance is biometric, and every payment clearance goes through the right approval chain. That's not
+    accounting software — that's a business operating system built exactly for Batra Footwear Distribution.
+  </div>
+
+  <p style="margin-top:48px;font-size:11px;color:#bbb;text-align:center;">
+    Batra Butterfly · Business Operating System · Confidential · June 2026
+  </p>
+
+</div>
+
+</body>
+</html>

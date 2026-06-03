@@ -4,10 +4,10 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useGetInvoice, useConfirmInvoice, useDeleteInvoice, getListInvoicesQueryKey, getGetDailySalesSummaryQueryKey, } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, CheckCircle2, Trash2, Package, User, Building2, Loader2, } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Trash2, Package, User, Building2, Loader2, FileDown, Eye, } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { formatCurrency } from "@/lib/utils";
-import { useAuth } from "@/contexts/AuthContext";
+import { downloadInvoicePDF, openInvoicePDF } from "@/lib/invoice-pdf";
 function StatusBadge({ status }) {
     var _a;
     const colors = {
@@ -20,6 +20,7 @@ function StatusBadge({ status }) {
     </span>);
 }
 export default function InvoiceDetail() {
+    var _a, _b, _c, _d, _e;
     const { id } = useParams();
     const [, navigate] = useLocation();
     const queryClient = useQueryClient();
@@ -28,16 +29,12 @@ export default function InvoiceDetail() {
     const { data: invoice, isLoading } = useGetInvoice(invoiceId, {
         query: { queryKey: ["invoices", invoiceId], enabled: !!invoiceId },
     });
-    const { isMaster } = useAuth();
     const confirmInvoice = useConfirmInvoice();
     const deleteInvoice = useDeleteInvoice();
     const handleConfirm = () => {
         confirmInvoice.mutate({ id: invoiceId }, {
-            onSuccess: (data) => {
-                toast({
-                    title: "Invoice confirmed",
-                    description: `Stock updated for ${data.stockUpdates.length} products. Commission earned: ${formatCurrency(data.commissionEarned)}`,
-                });
+            onSuccess: () => {
+                toast({ title: "Invoice confirmed", description: "Stock updated and ledger debited." });
                 queryClient.invalidateQueries({ queryKey: getListInvoicesQueryKey() });
                 queryClient.invalidateQueries({ queryKey: getGetDailySalesSummaryQueryKey() });
             },
@@ -71,6 +68,16 @@ export default function InvoiceDetail() {
         </Link>
       </div>);
     }
+    const itemsSubtotal = invoice.items.reduce((sum, it) => sum + it.totalPrice, 0);
+    const chargeRows = [
+        { label: "Misc", amount: (_a = invoice.miscCharge) !== null && _a !== void 0 ? _a : 0 },
+        { label: "Claim", amount: (_b = invoice.claimCharge) !== null && _b !== void 0 ? _b : 0 },
+        { label: "Cash Deposit", amount: (_c = invoice.cashDeposit) !== null && _c !== void 0 ? _c : 0 },
+        { label: "GST", amount: (_d = invoice.gstCharge) !== null && _d !== void 0 ? _d : 0 },
+        { label: "Packing", amount: (_e = invoice.packingCharge) !== null && _e !== void 0 ? _e : 0 },
+    ].filter((c) => c.amount > 0);
+    const handleViewPDF = () => openInvoicePDF(invoice);
+    const handleDownloadPDF = () => downloadInvoicePDF(invoice);
     return (<div className="space-y-6 max-w-3xl">
       {/* Back */}
       <Link href="/invoices" className="inline-flex items-center text-sm text-gray-400 hover:text-white transition-colors">
@@ -78,7 +85,7 @@ export default function InvoiceDetail() {
       </Link>
 
       {/* Header */}
-      <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="flex items-start justify-between gap-4">
+      <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="flex items-start justify-between gap-4 flex-wrap">
         <div>
           <div className="flex items-center gap-3 flex-wrap">
             <h1 className="text-3xl font-bold tracking-tight">{invoice.invoiceNumber}</h1>
@@ -93,9 +100,17 @@ export default function InvoiceDetail() {
         })}
           </p>
         </div>
-        <div className="text-right">
+        <div className="flex flex-col items-end gap-2">
           <p className="text-3xl font-bold text-white">{formatCurrency(invoice.totalAmount)}</p>
-          <p className="text-sm text-gray-400 mt-0.5">{invoice.items.length} items</p>
+          <p className="text-sm text-gray-400">{invoice.items.length} items</p>
+          <div className="flex gap-2 mt-1">
+            <Button size="sm" variant="outline" className="border-white/10 text-gray-300 hover:bg-white/5" onClick={handleViewPDF}>
+              <Eye className="h-3.5 w-3.5 mr-1.5"/> View PDF
+            </Button>
+            <Button size="sm" variant="outline" className="border-white/10 text-gray-300 hover:bg-white/5" onClick={handleDownloadPDF}>
+              <FileDown className="h-3.5 w-3.5 mr-1.5"/> Download
+            </Button>
+          </div>
         </div>
       </motion.div>
 
@@ -137,7 +152,7 @@ export default function InvoiceDetail() {
                 <span className="text-right">Unit Price</span>
                 <span className="text-right">Total</span>
               </div>
-              {invoice.items.map((item, i) => (<div key={item.id} className="grid grid-cols-[1fr_80px_100px_100px] gap-4 py-2.5 border-b border-white/5 last:border-0 px-1">
+              {invoice.items.map((item) => (<div key={item.id} className="grid grid-cols-[1fr_80px_100px_100px] gap-4 py-2.5 border-b border-white/5 last:border-0 px-1">
                   <div>
                     <p className="text-sm font-medium text-white">{item.productName}</p>
                     <p className="text-xs text-gray-500">{item.articleCode}</p>
@@ -146,8 +161,20 @@ export default function InvoiceDetail() {
                   <p className="text-sm text-right text-white">{formatCurrency(item.unitPrice)}</p>
                   <p className="text-sm font-semibold text-right text-white">{formatCurrency(item.totalPrice)}</p>
                 </div>))}
+              {chargeRows.length > 0 && (<div className="mt-3 pt-3 border-t border-white/10 space-y-1.5">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-400">Sub Total</span>
+                    <span className="text-gray-300">{formatCurrency(itemsSubtotal)}</span>
+                  </div>
+                  {chargeRows.map((c) => (<div key={c.label} className="flex justify-between text-sm">
+                      <span className="text-gray-400">{c.label}</span>
+                      <span className="text-gray-300">{formatCurrency(c.amount)}</span>
+                    </div>))}
+                </div>)}
               <div className="grid grid-cols-[1fr_80px_100px_100px] gap-4 pt-3 px-1">
-                <div className="col-span-3 text-right text-sm text-gray-400">Total</div>
+                <div className="col-span-3 text-right text-sm text-gray-400">
+                  {chargeRows.length > 0 ? "Grand Total" : "Total"}
+                </div>
                 <div className="text-right text-xl font-bold text-white">{formatCurrency(invoice.totalAmount)}</div>
               </div>
             </div>
@@ -165,7 +192,7 @@ export default function InvoiceDetail() {
           </Card>
         </motion.div>)}
 
-      {/* Cascade info for confirmed */}
+      {/* Confirmed banner */}
       {invoice.status === "confirmed" && (<motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
           <Card className="bg-green-950/30 border-green-500/20">
             <CardContent className="p-4 flex items-start gap-3">
@@ -173,7 +200,7 @@ export default function InvoiceDetail() {
               <div>
                 <p className="text-sm font-semibold text-green-300">Invoice Confirmed</p>
                 <p className="text-xs text-green-400/70 mt-0.5">
-                  Stock quantities updated · Retailer ledger debited · Staff commission recorded
+                  Stock quantities updated · Retailer ledger debited · Sale recorded
                 </p>
               </div>
             </CardContent>
@@ -185,16 +212,13 @@ export default function InvoiceDetail() {
           <Button variant="ghost" className="border border-red-500/30 text-red-400 hover:text-red-300 hover:bg-red-500/10" onClick={handleDelete} disabled={deleteInvoice.isPending}>
             <Trash2 className="h-4 w-4 mr-2"/> Delete Draft
           </Button>
-          {isMaster ? (<Button className="flex-1 bg-white text-black hover:bg-gray-200 font-semibold py-5" onClick={handleConfirm} disabled={confirmInvoice.isPending}>
-              {confirmInvoice.isPending ? (<><Loader2 className="h-4 w-4 mr-2 animate-spin"/> Confirming...</>) : (<><CheckCircle2 className="h-4 w-4 mr-2"/> Confirm Invoice</>)}
-            </Button>) : (<div className="flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-md bg-yellow-500/10 border border-yellow-500/20">
-              <span className="text-yellow-400 text-sm font-medium">📨 Sent for Approval</span>
-              <span className="text-gray-500 text-xs">(Master only)</span>
-            </div>)}
+          <Button className="flex-1 bg-white text-black hover:bg-gray-200 font-semibold py-5" onClick={handleConfirm} disabled={confirmInvoice.isPending}>
+            {confirmInvoice.isPending ? (<><Loader2 className="h-4 w-4 mr-2 animate-spin"/> Confirming...</>) : (<><CheckCircle2 className="h-4 w-4 mr-2"/> Confirm Invoice</>)}
+          </Button>
         </motion.div>)}
 
       <p className="text-xs text-gray-700 text-center">
-        Confirming will deduct stock, record a ledger sale for {invoice.retailerName}, and log commission for {invoice.staffName}
+        Confirming will deduct stock and record a ledger sale for {invoice.retailerName}
       </p>
     </div>);
 }

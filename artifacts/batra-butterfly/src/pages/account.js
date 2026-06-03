@@ -54,7 +54,7 @@ export default function AccountPage() {
     const [pinMsg, setPinMsg] = useState({});
     const [showAddStaff, setShowAddStaff] = useState(false);
     const [newStaffName, setNewStaffName] = useState("");
-    const [newStaffCommission, setNewStaffCommission] = useState("5");
+    const [newStaffSalary, setNewStaffSalary] = useState("");
     const [newStaffPin, setNewStaffPin] = useState("");
     const [addingStaff, setAddingStaff] = useState(false);
     const [addStaffMsg, setAddStaffMsg] = useState("");
@@ -157,7 +157,7 @@ export default function AccountPage() {
                 credentials: "include",
                 body: JSON.stringify({
                     name: newStaffName.trim(),
-                    commissionRate: parseFloat(newStaffCommission) || 5,
+                    salary: parseFloat(newStaffSalary) || 0,
                 }),
             });
             const created = await res.json();
@@ -178,7 +178,7 @@ export default function AccountPage() {
             });
             setStaff(await staffRes.json());
             setNewStaffName("");
-            setNewStaffCommission("5");
+            setNewStaffSalary("");
             setNewStaffPin("");
             setShowAddStaff(false);
             setAddStaffMsg("Staff member added!");
@@ -299,9 +299,9 @@ export default function AccountPage() {
                     <div className="flex gap-2">
                       <div className="flex-1 space-y-1">
                         <label className="text-xs text-gray-400">
-                          Commission %
+                          Monthly Salary (₹)
                         </label>
-                        <Input type="number" min="0" max="100" value={newStaffCommission} onChange={(e) => setNewStaffCommission(e.target.value)} className="bg-white/10 border-white/20 text-white"/>
+                        <Input type="number" min="0" placeholder="0" value={newStaffSalary} onChange={(e) => setNewStaffSalary(e.target.value)} className="bg-white/10 border-white/20 text-white"/>
                       </div>
                       <div className="flex-1 space-y-1">
                         <label className="text-xs text-gray-400">
@@ -338,7 +338,7 @@ export default function AccountPage() {
                     <div>
                       <p className="text-white font-medium text-sm">{s.name}</p>
                       <p className="text-gray-500 text-xs">
-                        {s.commissionRate}% commission
+                        Salary: {s.salary > 0 ? `₹${s.salary.toLocaleString("en-IN")}` : "Not set"}
                       </p>
                     </div>
                     <div className="flex items-center gap-1">

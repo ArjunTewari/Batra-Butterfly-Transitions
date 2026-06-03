@@ -166,7 +166,7 @@ export default function Invoices() {
             onSuccess: (data) => {
                 toast({
                     title: "Invoice confirmed",
-                    description: `Stock updated for ${data.stockUpdates.length} items. Commission: ${formatCurrency(data.commissionEarned)}`,
+                    description: `Stock updated for ${data.stockUpdates.length} items.`,
                 });
                 queryClient.invalidateQueries({ queryKey: getListInvoicesQueryKey() });
                 queryClient.invalidateQueries({ queryKey: getGetDailySalesSummaryQueryKey() });

@@ -1,22 +1,30 @@
 import { Router } from "express";
 import { eq, and } from "drizzle-orm";
-import { db, staffTable, salesTable } from "@workspace/db";
+import { db, staffTable, salesTable, invoicesTable } from "@workspace/db";
 import { CreateStaffBody, GetStaffPerformanceQueryParams, GetStaffDetailParams, CreateSaleBody, } from "@workspace/api-zod";
 import { requireAuth } from "../middleware/requireAuth";
 const router = Router();
-async function computeStaffPerformance(staff, sales) {
-    const totalSales = sales.reduce((s, e) => s + parseFloat(e.amount), 0);
-    const totalOrders = sales.length;
+async function computeStaffPerformance(staff, accountId, month, year) {
+    const invoices = await db
+        .select({ id: invoicesTable.id, totalAmount: invoicesTable.totalAmount, date: invoicesTable.date })
+        .from(invoicesTable)
+        .where(and(eq(invoicesTable.accountId, accountId), eq(invoicesTable.staffId, staff.id), eq(invoicesTable.status, "confirmed")));
+    const filtered = invoices.filter((inv) => {
+        if (month && inv.date.getMonth() + 1 !== month)
+            return false;
+        if (year && inv.date.getFullYear() !== year)
+            return false;
+        return true;
+    });
+    const totalSales = filtered.reduce((s, e) => s + parseFloat(e.totalAmount), 0);
+    const totalOrders = filtered.length;
     const avgOrderValue = totalOrders > 0 ? totalSales / totalOrders : 0;
-    const commission = totalSales * (parseFloat(staff.commissionRate) / 100);
     return {
         id: staff.id,
         name: staff.name,
-        commissionRate: parseFloat(staff.commissionRate),
         totalSales,
         totalOrders,
         avgOrderValue,
-        commission,
     };
 }
 router.get("/staff", requireAuth, async (req, res) => {
@@ -25,7 +33,7 @@ router.get("/staff", requireAuth, async (req, res) => {
     res.json(staffList.map((s) => ({
         id: s.id,
         name: s.name,
-        commissionRate: parseFloat(s.commissionRate),
+        salary: parseFloat(s.salary),
         createdAt: s.createdAt.toISOString(),
     })));
 });
@@ -39,12 +47,12 @@ router.post("/staff", requireAuth, async (req, res) => {
     const [staff] = await db.insert(staffTable).values({
         accountId,
         name: parsed.data.name,
-        commissionRate: String(parsed.data.commissionRate),
+        salary: String(parsed.data.salary),
     }).returning();
     res.status(201).json({
         id: staff.id,
         name: staff.name,
-        commissionRate: parseFloat(staff.commissionRate),
+        salary: parseFloat(staff.salary),
         createdAt: staff.createdAt.toISOString(),
     });
 });
@@ -52,21 +60,9 @@ router.get("/staff/performance", requireAuth, async (req, res) => {
     const accountId = req.session.accountId;
     const qParams = GetStaffPerformanceQueryParams.safeParse(req.query);
     const staffList = await db.select().from(staffTable).where(eq(staffTable.accountId, accountId));
-    const results = await Promise.all(staffList.map(async (s) => {
-        const sales = await db.select().from(salesTable).where(and(eq(salesTable.staffId, s.id), eq(salesTable.accountId, accountId)));
-        let filteredSales = sales;
-        if (qParams.success && (qParams.data.month || qParams.data.year)) {
-            filteredSales = sales.filter((sale) => {
-                const d = sale.date;
-                if (qParams.data.month && d.getMonth() + 1 !== qParams.data.month)
-                    return false;
-                if (qParams.data.year && d.getFullYear() !== qParams.data.year)
-                    return false;
-                return true;
-            });
-        }
-        return computeStaffPerformance(s, filteredSales);
-    }));
+    const month = qParams.success ? qParams.data.month : undefined;
+    const year = qParams.success ? qParams.data.year : undefined;
+    const results = await Promise.all(staffList.map((s) => computeStaffPerformance(s, accountId, month, year)));
     res.json(results.sort((a, b) => b.totalSales - a.totalSales));
 });
 router.get("/staff/:id", requireAuth, async (req, res) => {
@@ -82,8 +78,7 @@ router.get("/staff/:id", requireAuth, async (req, res) => {
         res.status(404).json({ error: "Staff not found" });
         return;
     }
-    const sales = await db.select().from(salesTable).where(and(eq(salesTable.staffId, params.data.id), eq(salesTable.accountId, accountId)));
-    res.json(await computeStaffPerformance(staff, sales));
+    res.json(await computeStaffPerformance(staff, accountId));
 });
 router.post("/sales", requireAuth, async (req, res) => {
     const accountId = req.session.accountId;

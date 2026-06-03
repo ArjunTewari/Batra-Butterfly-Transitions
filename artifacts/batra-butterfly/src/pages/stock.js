@@ -176,7 +176,7 @@ export default function Stock() {
                     </Badge>
                     <AlertDialog>
                       <AlertDialogTrigger asChild>
-                        <button type="button" className="absolute top-2 left-2 p-1.5 rounded-md bg-black/60 backdrop-blur-md text-gray-300 hover:text-red-400 hover:bg-black/80 transition-colors opacity-0 group-hover:opacity-100" data-testid={`button-delete-${item.id}`} aria-label="Delete product">
+                        <button type="button" className="absolute top-2 left-2 p-1.5 rounded-md bg-black/60 backdrop-blur-md text-gray-400 hover:text-red-400 hover:bg-black/80 transition-colors" data-testid={`button-delete-${item.id}`} aria-label="Delete product">
                           <Trash2 className="h-4 w-4"/>
                         </button>
                       </AlertDialogTrigger>

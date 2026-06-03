@@ -180,8 +180,19 @@ router.post("/stock/confirm", requireAuth, async (req, res) => {
         return;
     }
     const { articleCode, quantity, type: movementType, imageUrl, imageUrls, productId, name, price, purchasePrice, supplierName, supplierId } = parsed.data;
-    // Resolve supplier: use provided ID, or find/create by name
-    let resolvedSupplierId = supplierId !== null && supplierId !== void 0 ? supplierId : null;
+    // Resolve supplier: use provided ID (scoped to this account), or find/create by name
+    let resolvedSupplierId = null;
+    if (supplierId != null) {
+        const [ownedSupplier] = await db
+            .select({ id: suppliersTable.id })
+            .from(suppliersTable)
+            .where(and(eq(suppliersTable.id, supplierId), eq(suppliersTable.accountId, accountId)));
+        if (!ownedSupplier) {
+            res.status(404).json({ error: "Supplier not found." });
+            return;
+        }
+        resolvedSupplierId = ownedSupplier.id;
+    }
     if (!resolvedSupplierId && (supplierName === null || supplierName === void 0 ? void 0 : supplierName.trim())) {
         const trimmed = supplierName.trim();
         const [existing] = await db.select().from(suppliersTable).where(and(eq(suppliersTable.name, trimmed), eq(suppliersTable.accountId, accountId)));

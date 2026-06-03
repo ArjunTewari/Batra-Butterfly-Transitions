@@ -14,6 +14,20 @@ import { Badge } from "@/components/ui/badge";
 import { formatCurrency } from "@/lib/utils";
 import { compressImage } from "@/lib/image";
 const DEFAULT_SALE_QUANTITY = 6;
+const CHARGE_CONFIG = [
+    { key: "miscCharge", label: "Misc" },
+    { key: "claimCharge", label: "Claim" },
+    { key: "cashDeposit", label: "Cash Deposit" },
+    { key: "gstCharge", label: "GST" },
+    { key: "packingCharge", label: "Packing" },
+];
+const INITIAL_CHARGES = {
+    miscCharge: { enabled: false, value: "" },
+    claimCharge: { enabled: false, value: "" },
+    cashDeposit: { enabled: false, value: "" },
+    gstCharge: { enabled: false, value: "" },
+    packingCharge: { enabled: false, value: "" },
+};
 export default function StockSale() {
     var _a;
     const [imagePreview, setImagePreview] = useState(null);
@@ -22,6 +36,7 @@ export default function StockSale() {
     const [selectedRetailerId, setSelectedRetailerId] = useState("");
     const [selectedStaffId, setSelectedStaffId] = useState("");
     const [invoiceNotes, setInvoiceNotes] = useState("");
+    const [charges, setCharges] = useState(INITIAL_CHARGES);
     const [invoiceConfirmed, setInvoiceConfirmed] = useState(false);
     const [confirmedInvoiceId, setConfirmedInvoiceId] = useState(null);
     const [confirmedInvoiceNumber, setConfirmedInvoiceNumber] = useState(null);
@@ -49,7 +64,10 @@ export default function StockSale() {
         analyzeSale.mutate({ data: { imageBase64: base64String } }, {
             onSuccess: (data) => {
                 // Default every detected product to a standard set quantity of 6 (editable).
-                setItems(data.detectedItems.map((item) => ({ ...item, quantity: DEFAULT_SALE_QUANTITY })));
+                setItems(data.detectedItems.map((item) => ({
+                    ...item,
+                    quantity: DEFAULT_SALE_QUANTITY,
+                })));
                 toast({
                     title: "Sale items detected",
                     description: `Found ${data.detectedItems.length} item type(s) in the image.`,
@@ -76,6 +94,18 @@ export default function StockSale() {
     const validItems = items.filter((item) => !item.notFound);
     const totalUnits = validItems.reduce((sum, i) => sum + i.quantity, 0);
     const totalAmount = validItems.reduce((sum, i) => { var _a, _b; return sum + i.quantity * ((_b = (_a = i.matchedProduct) === null || _a === void 0 ? void 0 : _a.price) !== null && _b !== void 0 ? _b : 0); }, 0);
+    const chargeValue = (key) => {
+        const c = charges[key];
+        if (!c.enabled)
+            return 0;
+        const n = parseFloat(c.value);
+        return Number.isFinite(n) && n > 0 ? n : 0;
+    };
+    const activeCharges = CHARGE_CONFIG.map((c) => ({ ...c, amount: chargeValue(c.key) })).filter((c) => c.amount > 0);
+    const chargesTotal = activeCharges.reduce((sum, c) => sum + c.amount, 0);
+    const grandTotal = totalAmount + chargesTotal;
+    const toggleCharge = (key) => setCharges((prev) => ({ ...prev, [key]: { ...prev[key], enabled: !prev[key].enabled } }));
+    const setChargeValue = (key, value) => setCharges((prev) => ({ ...prev, [key]: { ...prev[key], value } }));
     const selectedRetailer = retailers === null || retailers === void 0 ? void 0 : retailers.find((r) => String(r.id) === selectedRetailerId);
     const selectedStaff = staff === null || staff === void 0 ? void 0 : staff.find((s) => String(s.id) === selectedStaffId);
     const generateInvoiceNumber = useCallback(() => {
@@ -118,11 +148,13 @@ export default function StockSale() {
             const amount = (item.quantity * ((_f = (_e = item.matchedProduct) === null || _e === void 0 ? void 0 : _e.price) !== null && _f !== void 0 ? _f : 0)).toFixed(2).padStart(10);
             return `${name} ${qty} ${unit} ${price} ${amount}`;
         });
+        const chargeLines = activeCharges.map((c) => `${c.label.padEnd(40)} ${c.amount.toFixed(2).padStart(10)}`);
         const footer = [
             "-".repeat(48),
-            `${"".padEnd(40)} ${totalAmount.toFixed(2).padStart(10)}`,
+            `${"Sub Total".padEnd(40)} ${totalAmount.toFixed(2).padStart(10)}`,
+            ...chargeLines,
             "",
-            `Grand Total : ${" ".repeat(8)} ${String(totalUnits).padStart(6)} Pcs. ${" ".repeat(8)} \u20B9 ${totalAmount.toFixed(2).padStart(8)}`,
+            `Grand Total : ${" ".repeat(8)} ${String(totalUnits).padStart(6)} Pcs. ${" ".repeat(8)} \u20B9 ${grandTotal.toFixed(2).padStart(8)}`,
             "=".repeat(48),
             invoiceNotes ? `Note : ${invoiceNotes}` : "",
         ].filter(Boolean);
@@ -202,6 +234,11 @@ export default function StockSale() {
                 invoiceNumber,
                 notes: invoiceNotes || undefined,
                 imageUrl: imageBase64 !== null && imageBase64 !== void 0 ? imageBase64 : undefined,
+                miscCharge: chargeValue("miscCharge"),
+                claimCharge: chargeValue("claimCharge"),
+                cashDeposit: chargeValue("cashDeposit"),
+                gstCharge: chargeValue("gstCharge"),
+                packingCharge: chargeValue("packingCharge"),
                 items: validItems.map((item) => {
                     var _a, _b, _c, _d, _e;
                     return ({
@@ -253,6 +290,7 @@ export default function StockSale() {
         setSelectedRetailerId("");
         setSelectedStaffId("");
         setInvoiceNotes("");
+        setCharges(INITIAL_CHARGES);
         setInvoiceConfirmed(false);
         setConfirmedInvoiceId(null);
         setConfirmedInvoiceNumber(null);
@@ -479,11 +517,46 @@ export default function StockSale() {
                           </p>
                         </div>);
                 })}
+                      {chargesTotal > 0 && (<div className="flex justify-between px-3 py-1.5 text-xs">
+                          <span className="text-gray-400">Sub Total</span>
+                          <span className="text-gray-300">{formatCurrency(totalAmount)}</span>
+                        </div>)}
+                      {activeCharges.map((c) => (<div key={c.key} className="flex justify-between px-3 py-1.5 text-xs">
+                          <span className="text-gray-400">{c.label}</span>
+                          <span className="text-gray-300">{formatCurrency(c.amount)}</span>
+                        </div>))}
                       <div className="flex justify-between px-3 py-2 bg-white/[0.03]">
-                        <span className="text-sm font-semibold text-white">Total</span>
-                        <span className="text-sm font-bold text-white">{formatCurrency(totalAmount)}</span>
+                        <span className="text-sm font-semibold text-white">
+                          {chargesTotal > 0 ? "Grand Total" : "Total"}
+                        </span>
+                        <span className="text-sm font-bold text-white">{formatCurrency(grandTotal)}</span>
                       </div>
                     </div>)}
+                </div>
+
+                {/* Extra Charges */}
+                <div className="space-y-1.5">
+                  <Label className="text-sm text-gray-300">Extra Charges</Label>
+                  <div className="rounded-lg border border-white/10 divide-y divide-white/5 overflow-hidden">
+                    {CHARGE_CONFIG.map((c) => {
+                const state = charges[c.key];
+                return (<div key={c.key} className="flex items-center gap-2 px-3 py-2">
+                          <button type="button" onClick={() => toggleCharge(c.key)} disabled={validItems.length === 0} aria-pressed={state.enabled} className={`h-4 w-4 rounded border flex items-center justify-center shrink-0 transition-colors ${state.enabled
+                        ? "bg-white border-white text-black"
+                        : "border-white/30 text-transparent hover:border-white/60"} ${validItems.length === 0 ? "opacity-40 cursor-not-allowed" : ""}`} data-testid={`checkbox-charge-${c.key}`}>
+                            <CheckCircle2 className="h-3 w-3"/>
+                          </button>
+                          <span className="text-sm text-gray-300 flex-1">{c.label}</span>
+                          <div className="relative w-28 shrink-0">
+                            <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-gray-500">₹</span>
+                            <Input type="number" inputMode="decimal" min={0} placeholder="0" value={state.value} onChange={(e) => setChargeValue(c.key, e.target.value)} onFocus={() => {
+                        if (!state.enabled)
+                            toggleCharge(c.key);
+                    }} disabled={!state.enabled || validItems.length === 0} className="h-8 pl-5 bg-white/5 border-white/10 text-white text-sm text-right" data-testid={`input-charge-${c.key}`}/>
+                          </div>
+                        </div>);
+            })}
+                  </div>
                 </div>
 
                 {/* Notes */}

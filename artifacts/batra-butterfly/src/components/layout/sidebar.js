@@ -14,7 +14,7 @@ const allLinks = [
     { href: "/stock", label: "Stock", icon: Package, masterOnly: false },
     { href: "/invoices", label: "Invoices", icon: FileText, masterOnly: false },
     { href: "/suppliers", label: "Suppliers", icon: Truck, masterOnly: false },
-    { href: "/payment-clearance", label: "Payment Clearance", icon: CreditCard, masterOnly: true },
+    { href: "/payment-clearance", label: "Payment Clearance", icon: CreditCard, masterOnly: false },
     { href: "/account", label: "Account", icon: Settings, masterOnly: false },
 ];
 export function Sidebar() {

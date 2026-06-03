@@ -9,6 +9,8 @@ import Retailers from "@/pages/retailers";
 import RetailerDetail from "@/pages/retailer-detail";
 import Analytics from "@/pages/analytics";
 import Staff from "@/pages/staff";
+import StaffAttendance from "@/pages/staff-attendance";
+import StaffDetail from "@/pages/staff-detail";
 import Stock from "@/pages/stock";
 import StockUpload from "@/pages/stock-upload";
 import StockSale from "@/pages/stock-sale";
@@ -35,6 +37,8 @@ function Router() {
         <Route path="/retailers/:id" component={RetailerDetail}/>
         <Route path="/analytics" component={Analytics}/>
         <Route path="/staff" component={Staff}/>
+        <Route path="/staff/attendance" component={StaffAttendance}/>
+        <Route path="/staff/:id" component={StaffDetail}/>
         <Route path="/stock" component={Stock}/>
         <Route path="/stock/upload" component={StockUpload}/>
         <Route path="/stock/sale" component={StockSale}/>

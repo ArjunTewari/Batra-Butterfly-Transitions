@@ -80,7 +80,7 @@ router.get("/account/staff", requireAuth, async (req, res) => {
     res.json(staffList.map((s) => ({
         id: s.id,
         name: s.name,
-        commissionRate: parseFloat(s.commissionRate),
+        salary: parseFloat(s.salary),
         hasPin: !!s.pin,
         createdAt: s.createdAt.toISOString(),
     })));
