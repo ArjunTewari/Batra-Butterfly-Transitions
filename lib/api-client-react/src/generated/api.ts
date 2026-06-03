@@ -4819,7 +4819,7 @@ export function useListPaymentClearances<
 }
 
 /**
- * @summary Generate a payment clearance - deducts from retailer credit and records vendor payment
+ * @summary Request a payment clearance - queued for master approval
  */
 export const getCreatePaymentClearanceUrl = () => {
   return `/api/payment-clearance`;
@@ -4884,7 +4884,7 @@ export type CreatePaymentClearanceMutationError =
   ErrorType<CreatePaymentClearance404>;
 
 /**
- * @summary Generate a payment clearance - deducts from retailer credit and records vendor payment
+ * @summary Request a payment clearance - queued for master approval
  */
 export const useCreatePaymentClearance = <
   TError = ErrorType<CreatePaymentClearance404>,
@@ -4904,4 +4904,175 @@ export const useCreatePaymentClearance = <
   TContext
 > => {
   return useMutation(getCreatePaymentClearanceMutationOptions(options));
+};
+
+/**
+ * @summary Master approves a pending payment clearance - deducts from retailer ledger
+ */
+export const getApprovePaymentClearanceUrl = (id: number) => {
+  return `/api/payment-clearance/${id}/approve`;
+};
+
+export const approvePaymentClearance = async (
+  id: number,
+  options?: RequestInit,
+): Promise<PaymentClearanceRecord> => {
+  return customFetch<PaymentClearanceRecord>(
+    getApprovePaymentClearanceUrl(id),
+    {
+      ...options,
+      method: "POST",
+    },
+  );
+};
+
+export const getApprovePaymentClearanceMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof approvePaymentClearance>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof approvePaymentClearance>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  const mutationKey = ["approvePaymentClearance"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof approvePaymentClearance>>,
+    { id: number }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return approvePaymentClearance(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ApprovePaymentClearanceMutationResult = NonNullable<
+  Awaited<ReturnType<typeof approvePaymentClearance>>
+>;
+
+export type ApprovePaymentClearanceMutationError = ErrorType<void>;
+
+/**
+ * @summary Master approves a pending payment clearance - deducts from retailer ledger
+ */
+export const useApprovePaymentClearance = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof approvePaymentClearance>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof approvePaymentClearance>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  return useMutation(getApprovePaymentClearanceMutationOptions(options));
+};
+
+/**
+ * @summary Master rejects a pending payment clearance
+ */
+export const getRejectPaymentClearanceUrl = (id: number) => {
+  return `/api/payment-clearance/${id}/reject`;
+};
+
+export const rejectPaymentClearance = async (
+  id: number,
+  options?: RequestInit,
+): Promise<PaymentClearanceRecord> => {
+  return customFetch<PaymentClearanceRecord>(getRejectPaymentClearanceUrl(id), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getRejectPaymentClearanceMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof rejectPaymentClearance>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof rejectPaymentClearance>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  const mutationKey = ["rejectPaymentClearance"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof rejectPaymentClearance>>,
+    { id: number }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return rejectPaymentClearance(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type RejectPaymentClearanceMutationResult = NonNullable<
+  Awaited<ReturnType<typeof rejectPaymentClearance>>
+>;
+
+export type RejectPaymentClearanceMutationError = ErrorType<void>;
+
+/**
+ * @summary Master rejects a pending payment clearance
+ */
+export const useRejectPaymentClearance = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof rejectPaymentClearance>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof rejectPaymentClearance>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  return useMutation(getRejectPaymentClearanceMutationOptions(options));
 };

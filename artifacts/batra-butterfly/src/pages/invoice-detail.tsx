@@ -15,15 +15,15 @@ import {
   CheckCircle2,
   Trash2,
   Package,
-  Receipt,
   User,
   Building2,
-  Calendar,
   Loader2,
-  TrendingDown,
+  FileDown,
+  Eye,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { formatCurrency } from "@/lib/utils";
+import { downloadInvoicePDF, openInvoicePDF } from "@/lib/invoice-pdf";
 
 function StatusBadge({ status }: { status: string }) {
   const colors: Record<string, string> = {
@@ -57,11 +57,8 @@ export default function InvoiceDetail() {
     confirmInvoice.mutate(
       { id: invoiceId },
       {
-        onSuccess: (data) => {
-          toast({
-            title: "Invoice confirmed",
-            description: `Stock updated for ${data.stockUpdates.length} products. Commission earned: ${formatCurrency(data.commissionEarned)}`,
-          });
+        onSuccess: () => {
+          toast({ title: "Invoice confirmed", description: "Stock updated and ledger debited." });
           queryClient.invalidateQueries({ queryKey: getListInvoicesQueryKey() });
           queryClient.invalidateQueries({ queryKey: getGetDailySalesSummaryQueryKey() });
         },
@@ -118,6 +115,9 @@ export default function InvoiceDetail() {
     ] as const
   ).filter((c) => c.amount > 0);
 
+  const handleViewPDF = () => openInvoicePDF(invoice);
+  const handleDownloadPDF = () => downloadInvoicePDF(invoice);
+
   return (
     <div className="space-y-6 max-w-3xl">
       {/* Back */}
@@ -126,7 +126,7 @@ export default function InvoiceDetail() {
       </Link>
 
       {/* Header */}
-      <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="flex items-start justify-between gap-4">
+      <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="flex items-start justify-between gap-4 flex-wrap">
         <div>
           <div className="flex items-center gap-3 flex-wrap">
             <h1 className="text-3xl font-bold tracking-tight">{invoice.invoiceNumber}</h1>
@@ -141,9 +141,17 @@ export default function InvoiceDetail() {
             })}
           </p>
         </div>
-        <div className="text-right">
+        <div className="flex flex-col items-end gap-2">
           <p className="text-3xl font-bold text-white">{formatCurrency(invoice.totalAmount)}</p>
-          <p className="text-sm text-gray-400 mt-0.5">{invoice.items.length} items</p>
+          <p className="text-sm text-gray-400">{invoice.items.length} items</p>
+          <div className="flex gap-2 mt-1">
+            <Button size="sm" variant="outline" className="border-white/10 text-gray-300 hover:bg-white/5" onClick={handleViewPDF}>
+              <Eye className="h-3.5 w-3.5 mr-1.5" /> View PDF
+            </Button>
+            <Button size="sm" variant="outline" className="border-white/10 text-gray-300 hover:bg-white/5" onClick={handleDownloadPDF}>
+              <FileDown className="h-3.5 w-3.5 mr-1.5" /> Download
+            </Button>
+          </div>
         </div>
       </motion.div>
 
@@ -190,7 +198,7 @@ export default function InvoiceDetail() {
                 <span className="text-right">Unit Price</span>
                 <span className="text-right">Total</span>
               </div>
-              {invoice.items.map((item, i) => (
+              {invoice.items.map((item) => (
                 <div
                   key={item.id}
                   className="grid grid-cols-[1fr_80px_100px_100px] gap-4 py-2.5 border-b border-white/5 last:border-0 px-1"
@@ -241,7 +249,7 @@ export default function InvoiceDetail() {
         </motion.div>
       )}
 
-      {/* Cascade info for confirmed */}
+      {/* Confirmed banner */}
       {invoice.status === "confirmed" && (
         <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
           <Card className="bg-green-950/30 border-green-500/20">

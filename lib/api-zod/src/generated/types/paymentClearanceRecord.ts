@@ -11,7 +11,10 @@ export interface PaymentClearanceRecord {
   amount: number;
   /** @nullable */
   notes?: string | null;
+  status: string;
   date: Date;
+  /** @nullable */
+  approvedAt?: Date | null;
   /** @nullable */
   retailerName?: string | null;
   /** @nullable */

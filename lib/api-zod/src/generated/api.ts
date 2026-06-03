@@ -1203,7 +1203,9 @@ export const ListPaymentClearancesResponseItem = zod.object({
   id: zod.number(),
   amount: zod.number(),
   notes: zod.string().nullish(),
+  status: zod.string(),
   date: zod.coerce.date(),
+  approvedAt: zod.coerce.date().nullish(),
   retailerName: zod.string().nullish(),
   vendorName: zod.string().nullish(),
 });
@@ -1212,11 +1214,47 @@ export const ListPaymentClearancesResponse = zod.array(
 );
 
 /**
- * @summary Generate a payment clearance - deducts from retailer credit and records vendor payment
+ * @summary Request a payment clearance - queued for master approval
  */
 export const CreatePaymentClearanceBody = zod.object({
   amount: zod.number(),
   retailerName: zod.string(),
   vendorName: zod.string(),
   notes: zod.string().optional(),
+});
+
+/**
+ * @summary Master approves a pending payment clearance - deducts from retailer ledger
+ */
+export const ApprovePaymentClearanceParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const ApprovePaymentClearanceResponse = zod.object({
+  id: zod.number(),
+  amount: zod.number(),
+  notes: zod.string().nullish(),
+  status: zod.string(),
+  date: zod.coerce.date(),
+  approvedAt: zod.coerce.date().nullish(),
+  retailerName: zod.string().nullish(),
+  vendorName: zod.string().nullish(),
+});
+
+/**
+ * @summary Master rejects a pending payment clearance
+ */
+export const RejectPaymentClearanceParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const RejectPaymentClearanceResponse = zod.object({
+  id: zod.number(),
+  amount: zod.number(),
+  notes: zod.string().nullish(),
+  status: zod.string(),
+  date: zod.coerce.date(),
+  approvedAt: zod.coerce.date().nullish(),
+  retailerName: zod.string().nullish(),
+  vendorName: zod.string().nullish(),
 });

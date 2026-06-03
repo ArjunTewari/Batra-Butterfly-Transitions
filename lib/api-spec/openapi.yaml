@@ -1114,7 +1114,7 @@ paths:
     post:
       operationId: createPaymentClearance
       tags: [payment]
-      summary: Generate a payment clearance - deducts from retailer credit and records vendor payment
+      summary: Request a payment clearance - queued for master approval
       requestBody:
         required: true
         content:
@@ -1123,7 +1123,7 @@ paths:
               $ref: "#/components/schemas/CreatePaymentClearanceBody"
       responses:
         "201":
-          description: Payment clearance created successfully
+          description: Payment clearance request created (status pending)
           content:
             application/json:
               schema:
@@ -1138,6 +1138,52 @@ paths:
                   error:
                     type: string
                 required: [error]
+
+  /payment-clearance/{id}/approve:
+    post:
+      operationId: approvePaymentClearance
+      tags: [payment]
+      summary: Master approves a pending payment clearance - deducts from retailer ledger
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Approved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaymentClearanceRecord"
+        "403":
+          description: Not master
+        "404":
+          description: Not found
+
+  /payment-clearance/{id}/reject:
+    post:
+      operationId: rejectPaymentClearance
+      tags: [payment]
+      summary: Master rejects a pending payment clearance
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Rejected
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaymentClearanceRecord"
+        "403":
+          description: Not master
+        "404":
+          description: Not found
 
 components:
   schemas:
@@ -2305,8 +2351,13 @@ components:
           type: number
         notes:
           type: ["string", "null"]
+        status:
+          type: string
         date:
           type: string
+          format: date-time
+        approvedAt:
+          type: ["string", "null"]
           format: date-time
         retailerName:
           type: ["string", "null"]
@@ -2315,6 +2366,7 @@ components:
       required:
         - id
         - amount
+        - status
         - date
 
     CreatePaymentClearanceBody:
