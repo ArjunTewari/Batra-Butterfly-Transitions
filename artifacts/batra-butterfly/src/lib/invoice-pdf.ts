@@ -32,7 +32,7 @@ export function buildInvoicePDF(invoice: InvoiceData): jsPDF {
   const W = doc.internal.pageSize.getWidth();
   const margin = 10;
 
-  // ── Header ──────────────────────────────────────────────────────────────
+  // ── Header ──
   doc.setFont("helvetica", "bold");
   doc.setFontSize(16);
   doc.text("ESTIMATE", W / 2, 14, { align: "center" });
@@ -47,20 +47,17 @@ export function buildInvoicePDF(invoice: InvoiceData): jsPDF {
     hour: "2-digit", minute: "2-digit", hour12: true,
   });
 
-  // Row 1
   doc.text(`Challan No : ${invoice.invoiceNumber}`, margin, 21);
   doc.text(`Date : ${dateStr}( ${timeStr} )`, W / 2, 21);
-  // Row 2
   doc.text(`M/S: ${invoice.retailerName}`, margin, 26);
   doc.text(`Tran: ${invoice.staffName}`, W / 2, 26);
 
-  // Divider
   doc.setDrawColor(0);
   doc.setLineWidth(0.3);
   doc.line(margin, 29, W - margin, 29);
 
-  // ── Items table ──────────────────────────────────────────────────────────
-  const rows = invoice.items.map((it) => [
+  // ── Items table ──
+  const rows: any[][] = invoice.items.map((it) => [
     `${it.productName}\n${it.articleCode}`,
     fmt(it.quantity),
     "Pcs.",
@@ -81,27 +78,47 @@ export function buildInvoicePDF(invoice: InvoiceData): jsPDF {
 
   if (hasCharges) {
     rows.push(["", "", "", "", ""]);
-    rows.push(["Sub Total", "", "", "", fmt(itemsSubtotal)]);
-    charges.forEach((c) => rows.push([c.label, "", "", "", fmt(c.amount)]));
+    rows.push([
+      { content: "Sub Total", styles: { halign: "left" } },
+      "", "", "",
+      { content: fmt(itemsSubtotal), styles: { halign: "right" } },
+    ]);
+    charges.forEach((c) => rows.push([
+      { content: c.label, styles: { halign: "left" } },
+      "", "", "",
+      { content: fmt(c.amount), styles: { halign: "right" } },
+    ]));
   }
 
   const totalQty = invoice.items.reduce((s, i) => s + i.quantity, 0);
+
+  rows.push(["", "", "", "", ""]);
+  rows.push([
+    { content: "Grand Total :", styles: { fontStyle: "bold", halign: "left" } },
+    { content: fmt(totalQty), styles: { fontStyle: "bold", halign: "right" } },
+    "", "",
+    { content: fmt(invoice.totalAmount), styles: { fontStyle: "bold", halign: "right" } },
+  ]);
 
   autoTable(doc, {
     startY: 31,
     head: [["Description of Goods", "Qty", "Unit", "Price", "Amount Rs."]],
     body: rows,
-    foot: [[
-      { content: "Grand Total :", colSpan: 2, styles: { fontStyle: "bold", halign: "left" } },
-      { content: fmt(totalQty), styles: { fontStyle: "bold", halign: "right" } },
-      "",
-      { content: `\u20b9 ${fmt(invoice.totalAmount)}`, styles: { fontStyle: "bold", halign: "right" } },
-    ]],
     margin: { left: margin, right: margin },
     styles: { fontSize: 7.5, cellPadding: 1.5, overflow: "linebreak" },
-    headStyles: { fillColor: [255, 255, 255], textColor: [0, 0, 0], fontStyle: "bold", lineWidth: 0.2, lineColor: [0, 0, 0] },
-    footStyles: { fillColor: [255, 255, 255], textColor: [0, 0, 0], lineWidth: 0.2, lineColor: [0, 0, 0] },
-    bodyStyles: { fillColor: [255, 255, 255], textColor: [0, 0, 0], lineWidth: 0.1, lineColor: [180, 180, 180] },
+    headStyles: {
+      fillColor: [255, 255, 255],
+      textColor: [0, 0, 0],
+      fontStyle: "bold",
+      lineWidth: 0.2,
+      lineColor: [0, 0, 0],
+    },
+    bodyStyles: {
+      fillColor: [255, 255, 255],
+      textColor: [0, 0, 0],
+      lineWidth: 0.1,
+      lineColor: [180, 180, 180],
+    },
     columnStyles: {
       0: { cellWidth: "auto" },
       1: { halign: "right", cellWidth: 18 },
@@ -113,6 +130,7 @@ export function buildInvoicePDF(invoice: InvoiceData): jsPDF {
     tableLineColor: [0, 0, 0],
   });
 
+  // ── Notes ──
   if (invoice.notes) {
     const finalY = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 3;
     doc.setFontSize(7);
