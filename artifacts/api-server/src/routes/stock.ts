@@ -42,6 +42,13 @@ function loadCloudinaryCatalog(): Map<string, string[]> {
 }
 const cloudinaryImageMap = loadCloudinaryCatalog();
 
+// Anthropic's many-image requests require ≤2000px per dimension.
+// Insert a Cloudinary resize transformation into the URL to enforce this.
+function cloudinaryResized(url: string, maxPx = 1500): string {
+  // Cloudinary URL: https://res.cloudinary.com/<cloud>/image/upload/<transforms?>/v<ver>/<id>
+  return url.replace(/\/image\/upload\//, `/image/upload/w_${maxPx},h_${maxPx},c_limit/`);
+}
+
 // Airtable source tables to import inventory from. Base/table IDs are not secret;
 // the access token is read from the AIRTABLE_API_KEY secret at request time.
 const AIRTABLE_SOURCES: ReadonlyArray<{ baseId: string; tableId: string }> = [
@@ -485,7 +492,7 @@ router.post("/stock/analyze-sale", requireAuth, async (req, res): Promise<void> 
   interface RefEntry { articleCode: string; imageUrl: string }
   const allRefs: RefEntry[] = [];
   for (const [code, urls] of cloudinaryImageMap.entries()) {
-    if (urls[0]) allRefs.push({ articleCode: code, imageUrl: urls[0] });
+    if (urls[0]) allRefs.push({ articleCode: code, imageUrl: cloudinaryResized(urls[0]) });
   }
 
   // Split into exactly 4 parallel batches
