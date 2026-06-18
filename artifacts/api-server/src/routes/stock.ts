@@ -487,15 +487,56 @@ router.post("/stock/analyze-sale", requireAuth, async (req, res): Promise<void> 
   const { rawBase64, mediaType } = parseBase64Image(imageBase64);
   const articleCodeList = productList.map(p => `${p.articleCode} (${p.name}, stock: ${p.currentStock})`).join("\n");
 
-  // Strategy: 4 parallel calls, each using a DIFFERENT image index across ALL products.
-  // Call 0 → image[0] per product, call 1 → image[1], etc.
-  // This gives every product 4 chances to match (using its different reference photos),
-  // and Claude always sees the full catalog so it can distinguish true matches.
-  // At 800px max, each image ≈ 640 tokens → 200 refs × 640 = 128K tokens per call (fits in 200K context).
+  type ContentBlock =
+    | { type: "image"; source: { type: "base64"; media_type: "image/jpeg" | "image/png" | "image/gif" | "image/webp"; data: string } }
+    | { type: "text"; text: string };
+
+  interface DetectedItem { index: number; description: string; quantity: number }
+  interface AiItem { itemIndex: number; articleCode: string; quantity: number; confidence: number; reasoning?: string }
+
+  // ── PHASE 1: Count exactly how many distinct items are in the photo ──────────
+  // No catalog references here — pure vision count so we anchor the result count.
+  req.log.info("Phase 1: counting distinct items in sale photo");
+  const countMsg = await anthropic.messages.create({
+    model: "claude-sonnet-4-6",
+    max_tokens: 1024,
+    messages: [{
+      role: "user",
+      content: [
+        {
+          type: "text",
+          text: `Look at this footwear sale photo carefully. Count every DISTINCT shoe model or style visible — each unique design counts once regardless of how many pairs there are.
+
+For each distinct item assign a sequential index (1, 2, 3…) and give a short description (colour, key style feature, hardware detail).
+
+Return ONLY valid JSON, no markdown:
+{"items":[{"index":1,"description":"beige slide with round YSL-style gold logo","quantity":1}]}`,
+        },
+        { type: "image", source: { type: "base64", media_type: mediaType, data: rawBase64 } },
+      ] as ContentBlock[],
+    }],
+  });
+
+  const countBlock = countMsg.content[0];
+  const countRaw = countBlock.type === "text" ? countBlock.text.trim().replace(/^```json\s*/i, "").replace(/```\s*$/, "").trim() : "{}";
+  let detectedItemsPhase1: DetectedItem[] = [];
+  try {
+    const parsed2 = JSON.parse(countRaw) as { items: DetectedItem[] };
+    detectedItemsPhase1 = Array.isArray(parsed2.items) ? parsed2.items : [];
+  } catch { /* fall through with empty list */ }
+  req.log.info({ count: detectedItemsPhase1.length, items: detectedItemsPhase1.map(i => i.description) }, "Phase 1 complete");
+
+  if (detectedItemsPhase1.length === 0) {
+    res.json({ detectedItems: [], imageUrl: imageBase64 });
+    return;
+  }
+
+  // ── PHASE 2: Match each detected item to catalog (4 parallel calls) ──────────
+  // Each call uses a different reference image index per product so every product
+  // gets 4 chances; Claude is told the exact item list from Phase 1 to match against.
 
   interface RefEntry { articleCode: string; data: string; mediaType: "image/jpeg" | "image/png" | "image/gif" | "image/webp" }
 
-  // Collect all URLs grouped by image index across all products
   const NUM_CALLS = 4;
   const urlsByIndex: Array<Array<{ articleCode: string; url: string }>> = Array.from({ length: NUM_CALLS }, () => []);
   for (const [code, urls] of cloudinaryImageMap.entries()) {
@@ -504,9 +545,8 @@ router.post("/stock/analyze-sale", requireAuth, async (req, res): Promise<void> 
     }
   }
 
-  // Fetch all images in parallel (deduplicated across calls)
   const allUrls = urlsByIndex.flat();
-  req.log.info({ totalImages: allUrls.length }, "Fetching all reference images as base64");
+  req.log.info({ totalImages: allUrls.length }, "Phase 2: fetching reference images");
   const fetchResults = await Promise.all(
     allUrls.map(async ({ articleCode, url }) => {
       const fetched = await fetchImageAsBase64(url);
@@ -516,7 +556,6 @@ router.post("/stock/analyze-sale", requireAuth, async (req, res): Promise<void> 
     })
   );
 
-  // Rebuild the 4 call batches using fetched base64 data
   const fetchMap = new Map(fetchResults.filter(Boolean).map(r => [r!.url, r!]));
   const activeBatches: RefEntry[][] = urlsByIndex.map(group =>
     group.map(({ articleCode, url }) => {
@@ -524,100 +563,81 @@ router.post("/stock/analyze-sale", requireAuth, async (req, res): Promise<void> 
       return f ? { articleCode, data: f.data, mediaType: f.mediaType } : null;
     }).filter((r): r is RefEntry => r !== null)
   ).filter(batch => batch.length > 0);
-
   if (activeBatches.length === 0) activeBatches.push([]);
-  req.log.info({ calls: activeBatches.length, sizes: activeBatches.map(b => b.length) }, "Reference images ready");
 
-  type ContentBlock =
-    | { type: "image"; source: { type: "base64"; media_type: "image/jpeg" | "image/png" | "image/gif" | "image/webp"; data: string } }
-    | { type: "text"; text: string };
+  const itemListText = detectedItemsPhase1.map(i => `Item ${i.index}: ${i.description}`).join("\n");
 
-  interface AiItem { articleCode: string; quantity: number; confidence: number; reasoning?: string }
+  const MATCH_INSTRUCTIONS = `You are matching footwear from a sale photo to catalog products.
 
-  const INSTRUCTIONS = `Full inventory (article code, name, stock):
+The sale photo contains EXACTLY ${detectedItemsPhase1.length} distinct item(s):
+${itemListText}
+
+Full catalog (article code, name, stock):
 ${articleCodeList || "(no products yet)"}
 
 Instructions:
-- Look at the SALE PHOTO (first image). Identify every DISTINCT shoe model/style visible.
-- For EACH visible item, compare it against ALL REFERENCE PHOTOS above (each labelled with its article code in square brackets).
-- Include an item ONLY when you find a genuinely close visual match — same style, silhouette, colour, strap/buckle pattern, and sole. Do NOT guess or pick the "closest" if it is not a real match.
-- If a visible item has no close match in the reference photos, skip it entirely.
-- Estimate the quantity of each matched article visible in the sale photo.
-- Return ONLY valid JSON, no markdown, no explanation.
+- For each of the ${detectedItemsPhase1.length} described items above, find its best matching article code from the REFERENCE PHOTOS (each labelled [articleCode]).
+- Match by visual similarity: style, colour, silhouette, hardware/buckle/logo, sole shape.
+- Return exactly one entry per item. If no reference photo closely matches an item, use "UNKNOWN".
+- Return ONLY valid JSON, no markdown.
 
 Return this exact JSON format:
-{
-  "items": [
-    { "articleCode": "1053/45", "quantity": 2, "confidence": 0.92, "reasoning": "Same beige slide with round gold logo buckle" }
-  ]
-}`;
+{"items":[{"itemIndex":1,"articleCode":"1001/101","quantity":1,"confidence":0.92,"reasoning":"Same beige slide with round YSL gold logo"}]}`;
 
-  const parseAiResponse = (text: string): AiItem[] => {
-    try {
-      const jsonText = text.trim().replace(/^```json\s*/i, "").replace(/```\s*$/, "").trim();
-      const obj = JSON.parse(jsonText) as { items: AiItem[] };
-      return Array.isArray(obj.items) ? obj.items : [];
-    } catch { return []; }
-  };
-
-  // Run all 4 batches in parallel — all images sent as inline base64
   const batchResults = await Promise.allSettled(
     activeBatches.map(async (batchRefs, batchIdx) => {
       const content: ContentBlock[] = [];
-      content.push({
-        type: "text",
-        text: "You are a footwear inventory expert. The FIRST image is the SALE PHOTO. Your job is to identify every distinct footwear item visible in that photo and match it to the catalog.",
-      });
+      content.push({ type: "text", text: "You are a footwear inventory expert matching items in a sale photo to catalog products." });
       content.push({ type: "image", source: { type: "base64", media_type: mediaType, data: rawBase64 } });
       if (batchRefs.length > 0) {
-        content.push({
-          type: "text",
-          text: `Below are ${batchRefs.length} REFERENCE PHOTOS from the catalog. Each reference image is preceded by its article code in square brackets. Visually compare each item in the SALE PHOTO to these references.`,
-        });
+        content.push({ type: "text", text: `REFERENCE PHOTOS (${batchRefs.length} catalog products, each labelled with [articleCode]):` });
         for (const ref of batchRefs) {
           content.push({ type: "text", text: `[${ref.articleCode}]` });
           content.push({ type: "image", source: { type: "base64", media_type: ref.mediaType, data: ref.data } });
         }
       }
-      content.push({ type: "text", text: INSTRUCTIONS });
+      content.push({ type: "text", text: MATCH_INSTRUCTIONS });
       const msg = await anthropic.messages.create({
         model: "claude-sonnet-4-6",
         max_tokens: 2048,
         messages: [{ role: "user", content }],
       });
       const block = msg.content[0];
-      const rawText = block.type === "text" ? block.text : "";
-      req.log.info({ batchIdx, refs: batchRefs.length, rawText }, "Batch AI response");
-      return parseAiResponse(rawText);
+      const rawText = block.type === "text" ? block.text.trim().replace(/^```json\s*/i, "").replace(/```\s*$/, "").trim() : "";
+      req.log.info({ batchIdx, refs: batchRefs.length, rawText }, "Phase 2 batch response");
+      try {
+        const obj = JSON.parse(rawText) as { items: AiItem[] };
+        return Array.isArray(obj.items) ? obj.items : [];
+      } catch { return []; }
     })
   );
 
-  // Merge: for each articleCode keep the highest-confidence detection across all batches
-  const bestByCode = new Map<string, AiItem>();
+  // Merge by itemIndex: for each of the N items, keep the highest-confidence match
+  const bestByIndex = new Map<number, AiItem>();
   for (const result of batchResults) {
-    if (result.status === "rejected") {
-      req.log.warn({ reason: String(result.reason) }, "Batch failed");
-      continue;
-    }
+    if (result.status === "rejected") { req.log.warn({ reason: String(result.reason) }, "Phase 2 batch failed"); continue; }
     for (const item of result.value) {
-      if (!item.articleCode || item.articleCode === "UNKNOWN") continue;
-      const existing = bestByCode.get(item.articleCode);
+      if (!item.itemIndex) continue;
+      const existing = bestByIndex.get(item.itemIndex);
       if (!existing || (item.confidence ?? 0) > (existing.confidence ?? 0)) {
-        bestByCode.set(item.articleCode, item);
+        bestByIndex.set(item.itemIndex, item);
       }
     }
   }
 
-  // Merge results: for each article code keep the highest-confidence detection across all 4 calls.
-  // No artificial threshold — Claude's instructions already prevent forced/guessed matches.
-  const mergedItems = Array.from(bestByCode.values()).sort((a, b) => (b.confidence ?? 0) - (a.confidence ?? 0));
-  req.log.info({ calls: activeBatches.length, detected: mergedItems.length }, "Sale analysis complete");
+  // Result is capped at exactly the N items from Phase 1
+  const mergedItems = Array.from(bestByIndex.values())
+    .filter(i => i.articleCode && i.articleCode !== "UNKNOWN")
+    .sort((a, b) => (b.confidence ?? 0) - (a.confidence ?? 0));
+  req.log.info({ phase1Count: detectedItemsPhase1.length, detected: mergedItems.length }, "Sale analysis complete");
 
-  const detectedItems = mergedItems.map((item) => {
+  const responseItems = mergedItems.map((item) => {
     const matchedProduct = productList.find(p => p.articleCode === item.articleCode) ?? null;
+    // Use quantity from Phase 1 if available, otherwise fall back to Phase 2's estimate
+    const phase1Item = detectedItemsPhase1.find(d => d.index === item.itemIndex);
     return {
       articleCode: item.articleCode,
-      quantity: Math.max(1, Math.round(item.quantity ?? 1)),
+      quantity: Math.max(1, Math.round(phase1Item?.quantity ?? item.quantity ?? 1)),
       confidence: Math.round((item.confidence ?? 0.5) * 100) / 100,
       reasoning: item.reasoning,
       matchedProduct: matchedProduct ?? undefined,
@@ -625,11 +645,10 @@ Return this exact JSON format:
     };
   });
 
-  // Already sorted by confidence (only 1 item, but kept for consistency)
-  detectedItems.sort((a, b) => b.confidence - a.confidence);
+  responseItems.sort((a, b) => b.confidence - a.confidence);
 
   res.json({
-    detectedItems,
+    detectedItems: responseItems,
     imageUrl: imageBase64,
   });
 });
