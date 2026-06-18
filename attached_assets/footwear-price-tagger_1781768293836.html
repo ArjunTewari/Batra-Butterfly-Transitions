@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Sole Tags — Footwear Price Tagger</title>
+<style>
+  :root{
+    --paper:#f6f1e7;
+    --ink:#1f1b16;
+    --leather:#7a3b2e;
+    --accent:#d98e3a;
+    --line:#cfc3ad;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    font-family:'Courier New', monospace;
+    background:var(--paper);
+    color:var(--ink);
+    padding:24px;
+  }
+  h1{
+    font-family:Georgia, serif;
+    font-size:28px;
+    letter-spacing:1px;
+    border-bottom:3px solid var(--leather);
+    padding-bottom:8px;
+    margin-bottom:4px;
+  }
+  .sub{color:#665d50;font-size:13px;margin-bottom:20px;}
+  .panel{
+    background:#fffdf8;
+    border:1px solid var(--line);
+    border-radius:8px;
+    padding:20px;
+    max-width:900px;
+    margin:0 auto;
+  }
+  .drop{
+    border:2px dashed var(--leather);
+    border-radius:8px;
+    padding:30px;
+    text-align:center;
+    cursor:pointer;
+    transition:background .2s;
+  }
+  .drop:hover{background:#fbeede;}
+  input[type=file]{display:none;}
+  button{
+    font-family:inherit;
+    background:var(--leather);
+    color:#fff;
+    border:none;
+    padding:10px 18px;
+    border-radius:6px;
+    cursor:pointer;
+    font-size:14px;
+    margin-top:14px;
+  }
+  button:disabled{background:#b8a99c;cursor:not-allowed;}
+  button:hover:not(:disabled){background:#5e2c22;}
+  #stageWrap{
+    margin-top:20px;
+    display:inline-block;
+    max-width:100%;
+    padding:40px;
+    background:#ffffff;
+    border:1px solid var(--line);
+    border-radius:8px;
+  }
+  #stage{
+    position:relative;
+    display:inline-block;
+    max-width:100%;
+  }
+  #stage img{
+    display:block;
+    max-width:100%;
+    border-radius:4px;
+  }
+  #overlay{
+    position:absolute;
+    top:0;left:0;
+    width:100%;height:100%;
+    pointer-events:none;
+    overflow:visible;
+  }
+  .tag{
+    position:absolute;
+    background:var(--accent);
+    color:#2a1c0c;
+    font-weight:bold;
+    font-size:13px;
+    padding:4px 10px;
+    border-radius:5px;
+    border:1px solid #00000022;
+    box-shadow:1px 2px 4px rgba(0,0,0,.25);
+    white-space:nowrap;
+    transform:translate(-50%,-50%);
+  }
+  .anchorDot{
+    position:absolute;
+    width:8px;height:8px;
+    background:var(--accent);
+    border:1px solid #00000033;
+    border-radius:50%;
+    transform:translate(-50%,-50%);
+  }
+  #status{
+    margin-top:12px;
+    font-size:13px;
+    color:#665d50;
+    min-height:18px;
+  }
+  .note{font-size:12px;color:#998c7d;margin-top:6px;}
+</style>
+</head>
+<body>
+<div class="panel">
+  <h1>Sole Tags</h1>
+  <div class="sub">Upload a photo of a shoe cluster — Claude Haiku 4.5 spots each pair and stamps a price tag beside it.</div>
+
+  <label class="drop" for="fileInput">
+    <div id="dropText">Click to choose an image, or drag one here</div>
+  </label>
+  <input type="file" id="fileInput" accept="image/*">
+
+  <div>
+    <button id="runBtn" disabled>Tag Prices</button>
+    <button id="resetBtn" disabled>Reset</button>
+  </div>
+  <div class="note">Prices are randomly generated for fun — not real valuations.</div>
+  <div id="status"></div>
+
+  <div id="stageWrap"><div id="stage"></div></div>
+</div>
+
+<script>
+const fileInput = document.getElementById('fileInput');
+const dropText = document.getElementById('dropText');
+const runBtn = document.getElementById('runBtn');
+const resetBtn = document.getElementById('resetBtn');
+const stage = document.getElementById('stage');
+const status = document.getElementById('status');
+
+let imgEl = null;
+let base64Data = null;
+let mediaType = null;
+
+fileInput.addEventListener('change', e => {
+  const file = e.target.files[0];
+  if(!file) return;
+  mediaType = file.type;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    base64Data = ev.target.result.split(',')[1];
+    stage.innerHTML = '';
+    imgEl = document.createElement('img');
+    imgEl.src = ev.target.result;
+    stage.appendChild(imgEl);
+    dropText.textContent = file.name;
+    runBtn.disabled = false;
+    resetBtn.disabled = false;
+    status.textContent = '';
+  };
+  reader.readAsDataURL(file);
+});
+
+resetBtn.addEventListener('click', () => {
+  fileInput.value = '';
+  base64Data = null;
+  stage.innerHTML = '';
+  dropText.textContent = 'Click to choose an image, or drag one here';
+  runBtn.disabled = true;
+  resetBtn.disabled = true;
+  status.textContent = '';
+});
+
+runBtn.addEventListener('click', async () => {
+  if(!base64Data) return;
+  runBtn.disabled = true;
+  status.textContent = 'Looking at the shoes…';
+
+  // remove old overlay
+  stage.querySelectorAll('.tag, .anchorDot, #overlay').forEach(t => t.remove());
+
+  try {
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "claude-haiku-4-5-20251001",
+        max_tokens: 1200,
+        messages: [{
+          role: "user",
+          content: [
+            { type: "image", source: { type: "base64", media_type: mediaType, data: base64Data } },
+            { type: "text", text: "This image shows a cluster of footwear laid out on the floor, usually arranged as left/right pairs in rows. Identify each PAIR of shoes (treat a left+right pair as one item; if an item appears alone, that's its own item). For each pair, give: a point (anchor_x, anchor_y) as percentages (0-100) of the image's width/height marking a clear spot ON the pair (e.g. center of the insole or upper, somewhere visually empty within the shoe) where a small dot/marker can sit, and a side (\"top\" or \"bottom\") indicating whether that pair is closer to the top edge or bottom edge of the image. Order items roughly left-to-right within each row, and list rows top row first. Respond ONLY with JSON, no markdown, no preamble, in this exact format: {\"items\":[{\"label\":\"short description\",\"anchor_x\":number,\"anchor_y\":number,\"side\":\"top\"}]}" }
+          ]
+        }]
+      })
+    });
+
+    const data = await response.json();
+    const textBlock = data.content.find(b => b.type === 'text');
+    let cleaned = textBlock.text.replace(/```json|```/g, '').trim();
+    const parsed = JSON.parse(cleaned);
+    const items = parsed.items || [];
+
+    if(items.length === 0){
+      status.textContent = 'No footwear detected — try another image.';
+      runBtn.disabled = false;
+      return;
+    }
+
+    const rect = imgEl.getBoundingClientRect();
+    const w = rect.width, h = rect.height;
+    const MARGIN = 40; // matches #stageWrap padding
+
+    // create SVG overlay sized to include margins
+    const svg = document.createElementNS('http://www.w3.org/2000/svg','svg');
+    svg.id = 'overlay';
+    svg.setAttribute('width', w);
+    svg.setAttribute('height', h);
+    svg.style.left = '0px';
+    svg.style.top = '0px';
+    svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
+    stage.appendChild(svg);
+
+    // group items by side to spread tags evenly along that edge
+    const topItems = items.filter(i => i.side === 'top');
+    const bottomItems = items.filter(i => i.side !== 'top');
+
+    function placeTags(list, side){
+      const n = list.length;
+      list.forEach((item, idx) => {
+        const ax = (item.anchor_x/100) * w;
+        const ay = (item.anchor_y/100) * h;
+
+        // evenly space tag x positions across the image width, in original anchor order
+        const tagXPct = ((idx + 0.5) / n) * 100;
+        const tagX = (tagXPct/100) * w;
+        const tagY = side === 'top' ? -MARGIN/2 + 2 : h + MARGIN/2 - 2;
+
+        // leader line from anchor dot to tag
+        const line = document.createElementNS('http://www.w3.org/2000/svg','line');
+        line.setAttribute('x1', ax);
+        line.setAttribute('y1', ay);
+        line.setAttribute('x2', tagX);
+        line.setAttribute('y2', tagY);
+        line.setAttribute('stroke', '#d98e3a');
+        line.setAttribute('stroke-width', '1.5');
+        line.setAttribute('opacity', '0.85');
+        svg.appendChild(line);
+
+        // anchor dot
+        const dot = document.createElement('div');
+        dot.className = 'anchorDot';
+        dot.style.left = ax + 'px';
+        dot.style.top = ay + 'px';
+        stage.appendChild(dot);
+
+        // price tag
+        const price = (Math.floor(Math.random()*180+15) + (Math.random()<0.3?0.99:Math.round(Math.random()*9)/10)).toFixed(2);
+        const tag = document.createElement('div');
+        tag.className = 'tag';
+        tag.style.left = tagX + 'px';
+        tag.style.top = tagY + 'px';
+        tag.textContent = '$' + price;
+        tag.title = item.label || '';
+        stage.appendChild(tag);
+      });
+    }
+
+    if(topItems.length) placeTags(topItems, 'top');
+    if(bottomItems.length) placeTags(bottomItems, 'bottom');
+
+    status.textContent = `Tagged ${items.length} item${items.length>1?'s':''}.`;
+  } catch (err) {
+    console.error(err);
+    status.textContent = 'Something went wrong reading the image. Try again.';
+  } finally {
+    runBtn.disabled = false;
+  }
+});
+</script>
+</body>
+</html>
