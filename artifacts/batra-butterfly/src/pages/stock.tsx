@@ -5,6 +5,7 @@ import {
   getListStockQueryKey,
   useCreateStockItem,
   useDeleteStockItem,
+  importAirtable,
 } from "@workspace/api-client-react";
 import { motion } from "framer-motion";
 import { Card, CardContent } from "@/components/ui/card";
@@ -52,6 +53,8 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { useQueryClient } from "@tanstack/react-query";
 import { Badge } from "@/components/ui/badge";
+import { useToast } from "@/hooks/use-toast";
+import { Database, Loader2 } from "lucide-react";
 
 const formSchema = z.object({
   articleCode: z.string().min(1, "Article code is required"),
@@ -64,7 +67,54 @@ const formSchema = z.object({
 export default function Stock() {
   const [searchTerm, setSearchTerm] = useState("");
   const [isAddOpen, setIsAddOpen] = useState(false);
+  const [isImportOpen, setIsImportOpen] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [importStatus, setImportStatus] = useState("");
+  const [importTotals, setImportTotals] = useState({ imported: 0, updated: 0, skipped: 0 });
   const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  const runAirtableImport = async () => {
+    setImporting(true);
+    setImportTotals({ imported: 0, updated: 0, skipped: 0 });
+    const totals = { imported: 0, updated: 0, skipped: 0 };
+    try {
+      let sourceIndex = 0;
+      let totalSources = 1;
+      do {
+        let offset: string | undefined = undefined;
+        do {
+          setImportStatus(
+            `Importing table ${sourceIndex + 1} of ${totalSources}… ${totals.imported + totals.updated} products so far`,
+          );
+          const res = await importAirtable({ sourceIndex, offset });
+          totals.imported += res.imported;
+          totals.updated += res.updated;
+          totals.skipped += res.skipped;
+          totalSources = res.totalSources;
+          setImportTotals({ ...totals });
+          offset = res.nextOffset ?? undefined;
+        } while (offset);
+        sourceIndex++;
+      } while (sourceIndex < totalSources);
+
+      setImportStatus("Import complete");
+      queryClient.invalidateQueries({ queryKey: getListStockQueryKey() });
+      toast({
+        title: "Inventory imported",
+        description: `${totals.imported} added, ${totals.updated} updated${totals.skipped ? `, ${totals.skipped} skipped` : ""}.`,
+      });
+    } catch (err) {
+      toast({
+        variant: "destructive",
+        title: "Import failed",
+        description: (err as Error)?.message || "Could not import from Airtable.",
+      });
+      setImportStatus("Import failed");
+    } finally {
+      setImporting(false);
+    }
+  };
 
   const { data: stock, isLoading } = useListStock({
     query: { queryKey: getListStockQueryKey() },
@@ -140,6 +190,67 @@ export default function Stock() {
         </div>
 
         <div className="flex items-center gap-2">
+          <Dialog open={isImportOpen} onOpenChange={(open) => { if (!importing) setIsImportOpen(open); }}>
+            <DialogTrigger asChild>
+              <Button
+                variant="outline"
+                className="bg-white/5 border-white/10 text-white hover:bg-white/10 hover:text-white"
+                data-testid="button-import-airtable"
+              >
+                <Database className="mr-2 h-4 w-4" />
+                Import from Airtable
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="bg-black border border-white/10 text-white sm:max-w-[460px]">
+              <DialogHeader>
+                <DialogTitle>Import inventory from Airtable</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4 pt-2">
+                <p className="text-sm text-gray-400">
+                  Pulls all products from your two Airtable tables into this account.
+                  Each product uses its product code as the name, starts with 6 in stock,
+                  and keeps its selling &amp; purchase rates, supplier, and photo. Existing
+                  products (same code) are updated, not duplicated.
+                </p>
+
+                {(importing || importStatus) && (
+                  <div className="rounded-lg border border-white/10 bg-white/[0.03] p-3 space-y-2">
+                    <div className="flex items-center gap-2 text-sm text-white">
+                      {importing && <Loader2 className="h-4 w-4 animate-spin" />}
+                      <span>{importStatus}</span>
+                    </div>
+                    <div className="flex gap-4 text-xs text-gray-400">
+                      <span className="text-green-400">{importTotals.imported} added</span>
+                      <span className="text-blue-400">{importTotals.updated} updated</span>
+                      {importTotals.skipped > 0 && (
+                        <span className="text-gray-500">{importTotals.skipped} skipped</span>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex justify-end gap-2">
+                  <Button
+                    variant="outline"
+                    className="bg-white/5 border-white/10 text-white hover:bg-white/10 hover:text-white"
+                    disabled={importing}
+                    onClick={() => setIsImportOpen(false)}
+                  >
+                    {importStatus === "Import complete" ? "Close" : "Cancel"}
+                  </Button>
+                  <Button
+                    className="bg-white text-black hover:bg-gray-200"
+                    disabled={importing}
+                    onClick={runAirtableImport}
+                    data-testid="button-run-import"
+                  >
+                    {importing ? "Importing…" : "Start Import"}
+                  </Button>
+                </div>
+              </div>
+            </DialogContent>
+          </Dialog>
+
           <Link href="/stock/upload">
             <Button
               variant="outline"

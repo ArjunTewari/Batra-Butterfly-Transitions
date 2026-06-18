@@ -198,6 +198,66 @@ export interface AnalyzeSaleImageBody {
   imageBase64: string;
 }
 
+export interface ImportAirtableBody {
+  /** Which configured Airtable table to import (0-based) */
+  sourceIndex: number;
+  /** Airtable pagination cursor returned by the previous call */
+  offset?: string;
+}
+
+export interface ImportAirtableResult {
+  sourceIndex: number;
+  /** New products created in this page */
+  imported: number;
+  /** Existing products updated in this page */
+  updated: number;
+  /** Records skipped (missing product code) in this page */
+  skipped: number;
+  /**
+   * Cursor for the next page of this source; null when source is finished
+   * @nullable
+   */
+  nextOffset?: string | null;
+  /** Total number of configured Airtable sources */
+  totalSources: number;
+  /** True when this source has no more pages */
+  done: boolean;
+}
+
+export type TagPricesBodyItemsItem = {
+  articleCode: string;
+  price: number;
+  label?: string;
+};
+
+export interface TagPricesBody {
+  /** Base64-encoded sale photo to tag with prices */
+  imageBase64: string;
+  items: TagPricesBodyItemsItem[];
+}
+
+export type PriceTagSide = (typeof PriceTagSide)[keyof typeof PriceTagSide];
+
+export const PriceTagSide = {
+  top: "top",
+  bottom: "bottom",
+} as const;
+
+export interface PriceTag {
+  /** Horizontal anchor position as a percentage (0-100) of image width */
+  anchor_x: number;
+  /** Vertical anchor position as a percentage (0-100) of image height */
+  anchor_y: number;
+  side: PriceTagSide;
+  articleCode: string;
+  price: number;
+  label?: string;
+}
+
+export interface TagPricesResult {
+  tags: PriceTag[];
+}
+
 export interface SaleDetectedItem {
   articleCode: string;
   quantity: number;

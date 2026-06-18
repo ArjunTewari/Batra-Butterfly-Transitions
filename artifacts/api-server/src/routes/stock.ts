@@ -7,11 +7,110 @@ import {
   ConfirmStockMovementBody,
   AnalyzeSaleImageBody,
   ConfirmSaleBody,
+  ImportAirtableBody,
+  TagPricesBody,
 } from "@workspace/api-zod";
 import { anthropic } from "@workspace/integrations-anthropic-ai";
 import { requireAuth } from "../middleware/requireAuth";
+import { trackAiUsage } from "../lib/trackAiUsage";
 
 const router: IRouter = Router();
+
+// Airtable source tables to import inventory from. Base/table IDs are not secret;
+// the access token is read from the AIRTABLE_API_KEY secret at request time.
+const AIRTABLE_SOURCES: ReadonlyArray<{ baseId: string; tableId: string }> = [
+  { baseId: "appuqLiFCocS0gkgt", tableId: "tblEGjtkcy0SrQhwB" },
+  { baseId: "appC9aBBwrRu5yBrT", tableId: "tblZTV0LAUwi3CQOQ" },
+];
+const AIRTABLE_PAGE_SIZE = 20;
+const MAX_IMAGES_PER_PRODUCT = 2;
+const AIRTABLE_OPENING_STOCK = 6;
+const MAX_TAG_IMAGE_BASE64_CHARS = 12 * 1024 * 1024; // ~9 MB decoded
+const MAX_TAG_ITEMS = 60;
+
+interface AirtableAttachment {
+  url?: string;
+  thumbnails?: { large?: { url?: string }; full?: { url?: string } };
+}
+interface AirtableRecord {
+  id: string;
+  fields: Record<string, unknown>;
+}
+
+function toNumber(v: unknown): number {
+  if (typeof v === "number") return Number.isFinite(v) ? v : 0;
+  if (typeof v === "string") {
+    const n = parseFloat(v.replace(/[^0-9.\-]/g, ""));
+    return Number.isFinite(n) ? n : 0;
+  }
+  return 0;
+}
+
+function toText(v: unknown): string {
+  if (v == null) return "";
+  if (typeof v === "string") return v.trim();
+  if (typeof v === "number") return String(v);
+  return String(v).trim();
+}
+
+const MAX_IMAGE_BYTES = 3 * 1024 * 1024; // 3 MB per downloaded image
+const IMAGE_FETCH_TIMEOUT_MS = 10_000;
+
+// Only allow downloading attachment images from Airtable-owned hosts. This blocks
+// SSRF via crafted attachment URLs (internal/loopback/metadata endpoints).
+function isAllowedAirtableImageUrl(raw: string): boolean {
+  let u: URL;
+  try {
+    u = new URL(raw);
+  } catch {
+    return false;
+  }
+  if (u.protocol !== "https:") return false;
+  const host = u.hostname.toLowerCase();
+  return (
+    host === "airtable.com" ||
+    host.endsWith(".airtable.com") ||
+    host === "airtableusercontent.com" ||
+    host.endsWith(".airtableusercontent.com")
+  );
+}
+
+async function fetchImageAsDataUrl(url: string): Promise<string | null> {
+  if (!isAllowedAirtableImageUrl(url)) return null;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), IMAGE_FETCH_TIMEOUT_MS);
+  try {
+    const resp = await fetch(url, { signal: controller.signal, redirect: "error" });
+    if (!resp.ok) return null;
+    const contentType = resp.headers.get("content-type") || "image/jpeg";
+    if (!contentType.startsWith("image/")) return null;
+    const lenHeader = resp.headers.get("content-length");
+    if (lenHeader && Number(lenHeader) > MAX_IMAGE_BYTES) return null;
+    if (!resp.body) return null;
+    const reader = resp.body.getReader();
+    const chunks: Uint8Array[] = [];
+    let total = 0;
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (value) {
+        total += value.length;
+        if (total > MAX_IMAGE_BYTES) {
+          await reader.cancel().catch(() => {});
+          return null;
+        }
+        chunks.push(value);
+      }
+    }
+    if (total === 0) return null;
+    const buf = Buffer.concat(chunks);
+    return `data:${contentType};base64,${buf.toString("base64")}`;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 function parseBase64Image(imageBase64: string): { rawBase64: string; mediaType: "image/jpeg" | "image/png" | "image/gif" | "image/webp" } {
   const base64Match = imageBase64.match(/^data:([a-zA-Z0-9/+]+);base64,(.+)$/);
@@ -567,6 +666,258 @@ router.delete("/stock/products/:id", requireAuth, async (req, res): Promise<void
   await db.delete(productsTable).where(and(eq(productsTable.id, id), eq(productsTable.accountId, accountId)));
 
   res.status(204).end();
+});
+
+router.post("/stock/import-airtable", requireAuth, async (req, res): Promise<void> => {
+  const accountId = req.session.accountId!;
+  const parsed = ImportAirtableBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+
+  const apiKey = process.env.AIRTABLE_API_KEY;
+  if (!apiKey) {
+    res.status(500).json({ error: "AIRTABLE_API_KEY is not configured." });
+    return;
+  }
+
+  const { sourceIndex, offset } = parsed.data;
+  const source = AIRTABLE_SOURCES[sourceIndex];
+  if (!source) {
+    res.status(400).json({ error: "Invalid sourceIndex." });
+    return;
+  }
+
+  const url = new URL(`https://api.airtable.com/v0/${source.baseId}/${source.tableId}`);
+  url.searchParams.set("pageSize", String(AIRTABLE_PAGE_SIZE));
+  if (offset) url.searchParams.set("offset", offset);
+
+  const atResp = await fetch(url, { headers: { Authorization: `Bearer ${apiKey}` } });
+  if (!atResp.ok) {
+    const text = await atResp.text().catch(() => "");
+    req.log.error({ status: atResp.status, body: text.slice(0, 500) }, "Airtable fetch failed");
+    res.status(502).json({ error: `Airtable request failed (${atResp.status}).` });
+    return;
+  }
+
+  const data = (await atResp.json()) as { records?: AirtableRecord[]; offset?: string };
+  const records = Array.isArray(data.records) ? data.records : [];
+
+  // Cache suppliers for this page to avoid repeated lookups/inserts.
+  const supplierCache = new Map<string, number>();
+  const resolveSupplier = async (name: string): Promise<number | null> => {
+    if (!name) return null;
+    const cached = supplierCache.get(name);
+    if (cached) return cached;
+    const [existing] = await db
+      .select({ id: suppliersTable.id })
+      .from(suppliersTable)
+      .where(and(eq(suppliersTable.name, name), eq(suppliersTable.accountId, accountId)));
+    if (existing) {
+      supplierCache.set(name, existing.id);
+      return existing.id;
+    }
+    const [created] = await db
+      .insert(suppliersTable)
+      .values({ accountId, name, phone: null, address: null, gstin: null })
+      .returning();
+    supplierCache.set(name, created.id);
+    return created.id;
+  };
+
+  let imported = 0;
+  let updated = 0;
+  let skipped = 0;
+
+  for (const rec of records) {
+    const f = rec.fields ?? {};
+    const articleCode = toText(f["Product code"]);
+    if (!articleCode) {
+      skipped++;
+      continue;
+    }
+
+    const price = toNumber(f["Selling Rate"]);
+    const purchasePrice = toNumber(f["Purchase Rate"]);
+    const supplierName = toText(f["Supplier Name"]);
+
+    const attachments = (Array.isArray(f["Attachments"]) ? f["Attachments"] : []) as AirtableAttachment[];
+    const sourceUrls = attachments
+      .map((a) => a?.thumbnails?.large?.url || a?.url)
+      .filter((u): u is string => typeof u === "string")
+      .slice(0, MAX_IMAGES_PER_PRODUCT);
+    const dataUrls = (await Promise.all(sourceUrls.map(fetchImageAsDataUrl))).filter(
+      (u): u is string => u !== null,
+    );
+    const primaryImage = dataUrls[0] ?? null;
+
+    const [existing] = await db
+      .select()
+      .from(productsTable)
+      .where(and(eq(productsTable.articleCode, articleCode), eq(productsTable.accountId, accountId)));
+
+    if (existing) {
+      await db
+        .update(productsTable)
+        .set({
+          price: String(price),
+          purchasePrice: purchasePrice > 0 ? String(purchasePrice) : null,
+          imageUrl: existing.imageUrl ?? primaryImage,
+        })
+        .where(eq(productsTable.id, existing.id));
+      updated++;
+      continue;
+    }
+
+    // Supplier resolution is idempotent and cached; do it before the tx.
+    const supplierId = await resolveSupplier(supplierName);
+
+    // Product, its images, and the opening stock movement must be atomic.
+    await db.transaction(async (tx) => {
+      const [product] = await tx
+        .insert(productsTable)
+        .values({
+          accountId,
+          articleCode,
+          name: articleCode,
+          price: String(price),
+          purchasePrice: purchasePrice > 0 ? String(purchasePrice) : null,
+          currentStock: AIRTABLE_OPENING_STOCK,
+          imageUrl: primaryImage,
+        })
+        .returning();
+
+      for (const img of dataUrls) {
+        await tx.insert(productImagesTable).values({ productId: product.id, imageUrl: img });
+      }
+
+      await tx.insert(stockMovementsTable).values({
+        productId: product.id,
+        supplierId,
+        type: "in",
+        quantity: AIRTABLE_OPENING_STOCK,
+        imageUrl: primaryImage,
+        date: new Date(),
+      });
+    });
+
+    imported++;
+  }
+
+  const nextOffset = data.offset ?? null;
+  res.json({
+    sourceIndex,
+    imported,
+    updated,
+    skipped,
+    nextOffset,
+    totalSources: AIRTABLE_SOURCES.length,
+    done: !nextOffset,
+  });
+});
+
+router.post("/stock/tag-prices", requireAuth, async (req, res): Promise<void> => {
+  const accountId = req.session.accountId!;
+  const parsed = TagPricesBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+
+  const { imageBase64, items } = parsed.data;
+
+  // Bound payload to protect the AI call and server memory.
+  if (imageBase64.length > MAX_TAG_IMAGE_BASE64_CHARS) {
+    res.status(413).json({ error: "Image is too large. Please use an image under ~9 MB." });
+    return;
+  }
+  if (items.length > MAX_TAG_ITEMS) {
+    res.status(400).json({ error: `Too many items (max ${MAX_TAG_ITEMS}).` });
+    return;
+  }
+  if (items.length === 0) {
+    res.json({ tags: [] });
+    return;
+  }
+
+  const { rawBase64, mediaType } = parseBase64Image(imageBase64);
+  const itemList = items
+    .map((i, idx) => `${idx + 1}. ${i.articleCode} — ₹${i.price}${i.label ? ` (${i.label})` : ""}`)
+    .join("\n");
+
+  const message = await anthropic.messages.create({
+    model: "claude-haiku-4-5",
+    max_tokens: 2048,
+    messages: [
+      {
+        role: "user",
+        content: [
+          { type: "image", source: { type: "base64", media_type: mediaType, data: rawBase64 } },
+          {
+            type: "text",
+            text: `You are placing price tags on a footwear sale photo. The photo (above) shows one or more distinct footwear pairs/items. Below are the items sold in this photo with their article codes and selling prices:
+
+${itemList}
+
+For EACH distinct footwear pair/item visible in the photo, return a tag object with:
+- "anchor_x": horizontal CENTER of that pair as a percentage 0-100 of image WIDTH
+- "anchor_y": vertical CENTER of that pair as a percentage 0-100 of image HEIGHT
+- "side": "bottom" if the pair sits in the UPPER half of the image (so the tag hangs below it), or "top" if the pair sits in the LOWER half (so the tag floats above it) — pick whichever keeps the tag inside the image
+- "articleCode": the best matching article code from the list above; use "" if none clearly matches
+
+Match each visible pair to exactly one list item where possible. Return ONLY valid JSON, no markdown:
+{"tags":[{"anchor_x":50,"anchor_y":40,"side":"top","articleCode":"1053/45"}]}`,
+          },
+        ],
+      },
+    ],
+  });
+
+  interface AiTag {
+    anchor_x: number;
+    anchor_y: number;
+    side?: string;
+    articleCode?: string;
+  }
+
+  await trackAiUsage({
+    accountId,
+    model: "claude-haiku-4-5",
+    feature: "price_tag",
+    inputTokens: message.usage.input_tokens,
+    outputTokens: message.usage.output_tokens,
+  });
+
+  let aiTags: AiTag[] = [];
+  try {
+    const block = message.content[0];
+    if (block.type === "text") {
+      const jsonText = block.text.trim().replace(/^```json\s*/i, "").replace(/```\s*$/, "").trim();
+      const result = JSON.parse(jsonText) as { tags?: AiTag[] };
+      aiTags = Array.isArray(result.tags) ? result.tags : [];
+    }
+  } catch {
+    req.log.warn("Failed to parse AI response for price tagging");
+  }
+
+  const clampPct = (n: number): number => Math.min(100, Math.max(0, Number.isFinite(n) ? n : 50));
+
+  const tags = aiTags.map((t, idx) => {
+    const matched = items.find((i) => i.articleCode === t.articleCode);
+    const fallback = items[idx % items.length];
+    const chosen = matched ?? fallback;
+    return {
+      anchor_x: clampPct(t.anchor_x),
+      anchor_y: clampPct(t.anchor_y),
+      side: t.side === "bottom" ? "bottom" : "top",
+      articleCode: chosen.articleCode,
+      price: chosen.price,
+      label: chosen.label ?? chosen.articleCode,
+    };
+  });
+
+  res.json({ tags });
 });
 
 export default router;

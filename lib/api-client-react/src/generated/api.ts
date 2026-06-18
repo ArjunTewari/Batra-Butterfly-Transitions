@@ -52,6 +52,8 @@ import type {
   GetTopRetailersParams,
   HealthStatus,
   ImageAnalysisResult,
+  ImportAirtableBody,
+  ImportAirtableResult,
   InvoiceAnalysisResult,
   InvoiceConfirmResult,
   InvoiceWithItems,
@@ -81,6 +83,8 @@ import type {
   SupplierBillWithItems,
   SupplierSummary,
   SupplierWithBills,
+  TagPricesBody,
+  TagPricesResult,
   UpdateRetailerBody,
 } from "./api.schemas";
 
@@ -3041,6 +3045,178 @@ export const useConfirmSale = <
   TContext
 > => {
   return useMutation(getConfirmSaleMutationOptions(options));
+};
+
+/**
+ * @summary Import one page of products from Airtable into the account inventory
+ */
+export const getImportAirtableUrl = () => {
+  return `/api/stock/import-airtable`;
+};
+
+export const importAirtable = async (
+  importAirtableBody: ImportAirtableBody,
+  options?: RequestInit,
+): Promise<ImportAirtableResult> => {
+  return customFetch<ImportAirtableResult>(getImportAirtableUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(importAirtableBody),
+  });
+};
+
+export const getImportAirtableMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof importAirtable>>,
+    TError,
+    { data: BodyType<ImportAirtableBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof importAirtable>>,
+  TError,
+  { data: BodyType<ImportAirtableBody> },
+  TContext
+> => {
+  const mutationKey = ["importAirtable"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof importAirtable>>,
+    { data: BodyType<ImportAirtableBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return importAirtable(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ImportAirtableMutationResult = NonNullable<
+  Awaited<ReturnType<typeof importAirtable>>
+>;
+export type ImportAirtableMutationBody = BodyType<ImportAirtableBody>;
+export type ImportAirtableMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Import one page of products from Airtable into the account inventory
+ */
+export const useImportAirtable = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof importAirtable>>,
+    TError,
+    { data: BodyType<ImportAirtableBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof importAirtable>>,
+  TError,
+  { data: BodyType<ImportAirtableBody> },
+  TContext
+> => {
+  return useMutation(getImportAirtableMutationOptions(options));
+};
+
+/**
+ * @summary Detect each footwear pair in a photo and return price-tag anchor points
+ */
+export const getTagPricesUrl = () => {
+  return `/api/stock/tag-prices`;
+};
+
+export const tagPrices = async (
+  tagPricesBody: TagPricesBody,
+  options?: RequestInit,
+): Promise<TagPricesResult> => {
+  return customFetch<TagPricesResult>(getTagPricesUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(tagPricesBody),
+  });
+};
+
+export const getTagPricesMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof tagPrices>>,
+    TError,
+    { data: BodyType<TagPricesBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof tagPrices>>,
+  TError,
+  { data: BodyType<TagPricesBody> },
+  TContext
+> => {
+  const mutationKey = ["tagPrices"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof tagPrices>>,
+    { data: BodyType<TagPricesBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return tagPrices(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type TagPricesMutationResult = NonNullable<
+  Awaited<ReturnType<typeof tagPrices>>
+>;
+export type TagPricesMutationBody = BodyType<TagPricesBody>;
+export type TagPricesMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Detect each footwear pair in a photo and return price-tag anchor points
+ */
+export const useTagPrices = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof tagPrices>>,
+    TError,
+    { data: BodyType<TagPricesBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof tagPrices>>,
+  TError,
+  { data: BodyType<TagPricesBody> },
+  TContext
+> => {
+  return useMutation(getTagPricesMutationOptions(options));
 };
 
 /**

@@ -698,6 +698,44 @@ paths:
               schema:
                 $ref: "#/components/schemas/ConfirmSaleResult"
 
+  /stock/import-airtable:
+    post:
+      operationId: importAirtable
+      tags: [stock]
+      summary: Import one page of products from Airtable into the account inventory
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ImportAirtableBody"
+      responses:
+        "200":
+          description: Page import result with cursor for the next page
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImportAirtableResult"
+
+  /stock/tag-prices:
+    post:
+      operationId: tagPrices
+      tags: [stock]
+      summary: Detect each footwear pair in a photo and return price-tag anchor points
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TagPricesBody"
+      responses:
+        "200":
+          description: Price-tag anchor points for the photo
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TagPricesResult"
+
   /stock/movements:
     get:
       operationId: listStockMovements
@@ -1576,6 +1614,108 @@ components:
           description: Base64-encoded image containing multiple sold items
       required:
         - imageBase64
+
+    ImportAirtableBody:
+      type: object
+      properties:
+        sourceIndex:
+          type: integer
+          description: Which configured Airtable table to import (0-based)
+        offset:
+          type: string
+          description: Airtable pagination cursor returned by the previous call
+      required:
+        - sourceIndex
+
+    ImportAirtableResult:
+      type: object
+      properties:
+        sourceIndex:
+          type: integer
+        imported:
+          type: integer
+          description: New products created in this page
+        updated:
+          type: integer
+          description: Existing products updated in this page
+        skipped:
+          type: integer
+          description: Records skipped (missing product code) in this page
+        nextOffset:
+          type: ["string", "null"]
+          description: Cursor for the next page of this source; null when source is finished
+        totalSources:
+          type: integer
+          description: Total number of configured Airtable sources
+        done:
+          type: boolean
+          description: True when this source has no more pages
+      required:
+        - sourceIndex
+        - imported
+        - updated
+        - skipped
+        - totalSources
+        - done
+
+    TagPricesBody:
+      type: object
+      properties:
+        imageBase64:
+          type: string
+          description: Base64-encoded sale photo to tag with prices
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              articleCode:
+                type: string
+              price:
+                type: number
+              label:
+                type: string
+            required:
+              - articleCode
+              - price
+      required:
+        - imageBase64
+        - items
+
+    PriceTag:
+      type: object
+      properties:
+        anchor_x:
+          type: number
+          description: Horizontal anchor position as a percentage (0-100) of image width
+        anchor_y:
+          type: number
+          description: Vertical anchor position as a percentage (0-100) of image height
+        side:
+          type: string
+          enum: [top, bottom]
+        articleCode:
+          type: string
+        price:
+          type: number
+        label:
+          type: string
+      required:
+        - anchor_x
+        - anchor_y
+        - side
+        - articleCode
+        - price
+
+    TagPricesResult:
+      type: object
+      properties:
+        tags:
+          type: array
+          items:
+            $ref: "#/components/schemas/PriceTag"
+      required:
+        - tags
 
     SaleDetectedItem:
       type: object

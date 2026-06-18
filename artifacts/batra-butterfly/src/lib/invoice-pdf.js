@@ -27,7 +27,8 @@ export function buildInvoicePDF(invoice) {
     doc.line(margin, 29, W - margin, 29);
     // ── Items table ──
     const rows = invoice.items.map((it) => [
-        `${it.productName}\n${it.articleCode}`,
+        it.articleCode,
+        it.productName,
         fmt(it.quantity),
         "Pcs.",
         fmt(it.unitPrice),
@@ -43,29 +44,31 @@ export function buildInvoicePDF(invoice) {
     ].filter((c) => c.amount > 0);
     const hasCharges = charges.length > 0;
     if (hasCharges) {
-        rows.push(["", "", "", "", ""]);
+        rows.push(["", "", "", "", "", ""]);
         rows.push([
             { content: "Sub Total", styles: { halign: "left" } },
-            "", "", "",
+            "", "", "", "",
             { content: fmt(itemsSubtotal), styles: { halign: "right" } },
         ]);
         charges.forEach((c) => rows.push([
             { content: c.label, styles: { halign: "left" } },
-            "", "", "",
+            "", "", "", "",
             { content: fmt(c.amount), styles: { halign: "right" } },
         ]));
     }
     const totalQty = invoice.items.reduce((s, i) => s + i.quantity, 0);
-    rows.push(["", "", "", "", ""]);
+    rows.push(["", "", "", "", "", ""]);
     rows.push([
         { content: "Grand Total :", styles: { fontStyle: "bold", halign: "left" } },
+        "",
         { content: fmt(totalQty), styles: { fontStyle: "bold", halign: "right" } },
-        "", "",
+        { content: "Pcs.", styles: { fontStyle: "bold" } },
+        "",
         { content: fmt(invoice.totalAmount), styles: { fontStyle: "bold", halign: "right" } },
     ]);
     autoTable(doc, {
         startY: 31,
-        head: [["Description of Goods", "Qty", "Unit", "Price", "Amount Rs."]],
+        head: [["Product Code", "Description of Goods", "Qty", "Unit", "Price", "Amount Rs."]],
         body: rows,
         margin: { left: margin, right: margin },
         styles: { fontSize: 7.5, cellPadding: 1.5, overflow: "linebreak" },
@@ -83,11 +86,12 @@ export function buildInvoicePDF(invoice) {
             lineColor: [180, 180, 180],
         },
         columnStyles: {
-            0: { cellWidth: "auto" },
-            1: { halign: "right", cellWidth: 18 },
-            2: { halign: "center", cellWidth: 14 },
-            3: { halign: "right", cellWidth: 22 },
-            4: { halign: "right", cellWidth: 28 },
+            0: { cellWidth: 22 },
+            1: { cellWidth: "auto" },
+            2: { halign: "right", cellWidth: 14 },
+            3: { halign: "center", cellWidth: 12 },
+            4: { halign: "right", cellWidth: 20 },
+            5: { halign: "right", cellWidth: 26 },
         },
         tableLineWidth: 0.3,
         tableLineColor: [0, 0, 0],
