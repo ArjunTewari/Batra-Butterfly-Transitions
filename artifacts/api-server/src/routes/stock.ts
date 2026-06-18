@@ -487,24 +487,36 @@ router.post("/stock/analyze-sale", requireAuth, async (req, res): Promise<void> 
   const articleCodeList = productList.map(p => `${p.articleCode} (${p.name}, stock: ${p.currentStock})`).join("\n");
 
   // Build reference list from Cloudinary catalog — 1 image per product.
-  // Smaller batches (≤40 refs each) give Claude much better detection accuracy.
-  // Cloudinary URLs work with Anthropic (no robots.txt block).
-  interface RefEntry { articleCode: string; imageUrl: string }
-  const allRefs: RefEntry[] = [];
+  // Use resized URLs (≤1500px) to satisfy Anthropic's multi-image dimension limit.
+  interface RefCandidate { articleCode: string; url: string }
+  const candidates: RefCandidate[] = [];
   for (const [code, urls] of cloudinaryImageMap.entries()) {
-    if (urls[0]) allRefs.push({ articleCode: code, imageUrl: cloudinaryResized(urls[0]) });
+    if (urls[0]) candidates.push({ articleCode: code, url: cloudinaryResized(urls[0]) });
   }
 
-  // Split into exactly 4 parallel batches
+  // Pre-fetch ALL reference images as base64 on our server so Anthropic never
+  // fetches any URL (avoids Anthropic's 100 URL/min content-fetching rate limit).
+  req.log.info({ count: candidates.length }, "Fetching reference images as base64");
+  const fetchedRefs = await Promise.all(
+    candidates.map(async (c) => {
+      const fetched = await fetchImageAsBase64(c.url);
+      if (!fetched) return null;
+      const { rawBase64: refRaw } = parseBase64Image(fetched.base64);
+      return { articleCode: c.articleCode, data: refRaw, mediaType: fetched.mediaType };
+    })
+  );
+  interface RefEntry { articleCode: string; data: string; mediaType: "image/jpeg" | "image/png" | "image/gif" | "image/webp" }
+  const allRefs: RefEntry[] = fetchedRefs.filter((r): r is RefEntry => r !== null);
+  req.log.info({ fetched: allRefs.length, failed: candidates.length - allRefs.length }, "Reference images ready");
+
+  // Split into exactly 4 parallel AI calls
   const NUM_BATCHES = 4;
   const batches: RefEntry[][] = [[], [], [], []];
   allRefs.forEach((ref, i) => batches[i % NUM_BATCHES].push(ref));
-  // If no Cloudinary refs, fall back to one empty batch (text-only)
   const activeBatches = batches.some(b => b.length > 0) ? batches : [[]];
 
   type ContentBlock =
     | { type: "image"; source: { type: "base64"; media_type: "image/jpeg" | "image/png" | "image/gif" | "image/webp"; data: string } }
-    | { type: "image"; source: { type: "url"; url: string } }
     | { type: "text"; text: string };
 
   interface AiItem { articleCode: string; quantity: number; confidence: number; reasoning?: string }
@@ -535,7 +547,7 @@ Return this exact JSON format:
     } catch { return []; }
   };
 
-  // Run all batches in parallel
+  // Run all 4 batches in parallel — all images sent as inline base64
   const batchResults = await Promise.allSettled(
     activeBatches.map(async (batchRefs, batchIdx) => {
       const content: ContentBlock[] = [];
@@ -551,7 +563,7 @@ Return this exact JSON format:
         });
         for (const ref of batchRefs) {
           content.push({ type: "text", text: `[${ref.articleCode}]` });
-          content.push({ type: "image", source: { type: "url", url: ref.imageUrl } });
+          content.push({ type: "image", source: { type: "base64", media_type: ref.mediaType, data: ref.data } });
         }
       }
       content.push({ type: "text", text: INSTRUCTIONS });
