@@ -683,10 +683,19 @@ export default function StockSale() {
                         )}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-1.5">
+                        <div className="flex items-center gap-1.5 flex-wrap">
                           <Badge className={`text-xs shrink-0 ${item.notFound ? "bg-red-500/20 text-red-400 border-red-500/30" : "bg-black/60 text-white border-white/10"}`}>
                             {item.articleCode}
                           </Badge>
+                          {!item.notFound && (
+                            <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full shrink-0 ${
+                              item.confidence >= 0.8 ? "bg-green-500/15 text-green-400" :
+                              item.confidence >= 0.6 ? "bg-yellow-500/15 text-yellow-400" :
+                              "bg-orange-500/15 text-orange-400"
+                            }`}>
+                              {Math.round(item.confidence * 100)}%
+                            </span>
+                          )}
                           {item.notFound && <AlertCircle className="h-3.5 w-3.5 text-red-400 shrink-0" />}
                         </div>
                         <p className="text-xs font-medium text-white mt-0.5 truncate">{item.matchedProduct?.name ?? "Unknown"}</p>

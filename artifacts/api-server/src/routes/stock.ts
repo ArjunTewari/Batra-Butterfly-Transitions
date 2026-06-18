@@ -1,5 +1,7 @@
 import { Router, type IRouter } from "express";
 import { eq, desc, and } from "drizzle-orm";
+import { readFileSync } from "fs";
+import { join } from "path";
 import { db, productsTable, stockMovementsTable, productImagesTable, suppliersTable } from "@workspace/db";
 import {
   CreateStockItemBody,
@@ -14,6 +16,31 @@ import { requireAuth } from "../middleware/requireAuth";
 import { trackAiUsage } from "../lib/trackAiUsage";
 
 const router: IRouter = Router();
+
+// ── Cloudinary catalog (uploaded by user, avoids Airtable robots.txt blocks) ──
+interface CloudinaryAttachment { cloudinary_url: string }
+interface CloudinaryCatalogRecord {
+  fields: {
+    "Product code": string;
+    Attachments_Cloudinary?: CloudinaryAttachment[];
+  };
+}
+function loadCloudinaryCatalog(): Map<string, string[]> {
+  try {
+    const raw = readFileSync(join(process.cwd(), "src/data/cloudinary-catalog.json"), "utf-8");
+    const records = JSON.parse(raw) as CloudinaryCatalogRecord[];
+    const map = new Map<string, string[]>();
+    for (const rec of records) {
+      const code = (rec.fields["Product code"] ?? "").trim();
+      const urls = (rec.fields.Attachments_Cloudinary ?? []).map((a) => a.cloudinary_url).filter(Boolean);
+      if (code && urls.length > 0) map.set(code, urls);
+    }
+    return map;
+  } catch {
+    return new Map();
+  }
+}
+const cloudinaryImageMap = loadCloudinaryCatalog();
 
 // Airtable source tables to import inventory from. Base/table IDs are not secret;
 // the access token is read from the AIRTABLE_API_KEY secret at request time.
@@ -452,109 +479,114 @@ router.post("/stock/analyze-sale", requireAuth, async (req, res): Promise<void> 
   const { rawBase64, mediaType } = parseBase64Image(imageBase64);
   const articleCodeList = productList.map(p => `${p.articleCode} (${p.name}, stock: ${p.currentStock})`).join("\n");
 
-  // Reference images — pass Airtable URLs directly (no download needed; Claude fetches them)
-  // Use up to 1 image per product, spread across ALL products with images (no stock-bias).
-  // Cap at 100 reference images to stay well within Claude's per-request limit.
-  const REFERENCE_IMAGE_CAP = 100;
-  const withImages = productList.filter((p) => p.images.length > 0);
-  // Shuffle so selection isn't biased toward alphabetical / Airtable order
-  const shuffled = withImages.sort(() => Math.random() - 0.5);
-  const reference: Array<{ articleCode: string; name: string; imageUrl: string }> = [];
-  for (const p of shuffled) {
-    if (reference.length >= REFERENCE_IMAGE_CAP) break;
-    reference.push({ articleCode: p.articleCode, name: p.name, imageUrl: p.images[0] });
+  // Build reference list from Cloudinary catalog (all products, all images).
+  // Cloudinary URLs work with Anthropic (no robots.txt block).
+  // Use ALL Cloudinary images for every product to maximise accuracy.
+  interface RefEntry { articleCode: string; imageUrl: string }
+  const allRefs: RefEntry[] = [];
+  for (const [code, urls] of cloudinaryImageMap.entries()) {
+    for (const url of urls) {
+      allRefs.push({ articleCode: code, imageUrl: url });
+    }
   }
+
+  // Claude allows ~100 images per request (1 sale photo + 99 refs).
+  // Split all refs into batches of 90 and run every batch in parallel.
+  const BATCH_SIZE = 90;
+  const batches: RefEntry[][] = [];
+  for (let i = 0; i < allRefs.length; i += BATCH_SIZE) {
+    batches.push(allRefs.slice(i, i + BATCH_SIZE));
+  }
+  // If no Cloudinary refs, use one empty batch so we still get a text-only result
+  if (batches.length === 0) batches.push([]);
 
   type ContentBlock =
     | { type: "image"; source: { type: "base64"; media_type: "image/jpeg" | "image/png" | "image/gif" | "image/webp"; data: string } }
     | { type: "image"; source: { type: "url"; url: string } }
     | { type: "text"; text: string };
 
-  const content: ContentBlock[] = [];
+  interface AiItem { articleCode: string; quantity: number; confidence: number; reasoning?: string }
 
-  content.push({
-    type: "text",
-    text: `You are a footwear inventory assistant. The FIRST image below is the SALE PHOTO showing one or more footwear items that have been sold. Identify each distinct shoe/slide/chappal/sandal/boot/item visible and match it to the inventory.`,
-  });
-  content.push({ type: "image", source: { type: "base64", media_type: mediaType, data: rawBase64 } });
-
-  if (reference.length > 0) {
-    content.push({
-      type: "text",
-      text: `Below are REFERENCE PHOTOS of known products from the catalog. Each reference is labelled with its article code. Compare the sale photo against these references to find the closest visual match (color, sole shape, strap style, embellishments, toe style).`,
-    });
-    for (const ref of reference) {
-      content.push({ type: "text", text: `[${ref.articleCode}]` });
-      content.push({ type: "image", source: { type: "url", url: ref.imageUrl } });
-    }
-  }
-
-  content.push({
-    type: "text",
-    text: `Full inventory (article code, name, stock):
+  const INSTRUCTIONS = `Full inventory (article code, name, stock):
 ${articleCodeList || "(no products yet)"}
 
 Instructions:
-- Count each DISTINCT shoe model/style visible in the SALE PHOTO.
-- For each item, prefer a visual match against the REFERENCE PHOTOS above; use the matching reference's article code.
-- If no reference photo matches, fall back to the closest article code from the inventory list by description.
-- Estimate the quantity of each matched article visible in the sale photo.
-- If an item genuinely matches nothing, use "UNKNOWN".
+- Look at the SALE PHOTO (first image). Identify every DISTINCT shoe model/style visible.
+- For each item you see, find the best matching article code by visually comparing it against the REFERENCE PHOTOS shown above (each labelled with its article code).
+- If no reference photo matches, use the article code from the text list that best fits by description.
+- Estimate the quantity of each distinct article visible in the sale photo.
+- Only use "UNKNOWN" if the item truly matches nothing in the catalog.
 - Return ONLY valid JSON, no markdown, no explanation.
 
 Return this exact JSON format:
 {
   "items": [
-    {
-      "articleCode": "BB-XXX",
-      "quantity": 2,
-      "confidence": 0.85,
-      "reasoning": "Brief reason"
-    }
+    { "articleCode": "1053/45", "quantity": 2, "confidence": 0.88, "reasoning": "Brief visual match reason" }
   ]
-}`,
-  });
+}`;
 
-  const message = await anthropic.messages.create({
-    model: "claude-sonnet-4-6",
-    max_tokens: 8192,
-    messages: [
-      {
-        role: "user",
-        content,
-      },
-    ],
-  });
+  const parseAiResponse = (text: string): AiItem[] => {
+    try {
+      const jsonText = text.trim().replace(/^```json\s*/i, "").replace(/```\s*$/, "").trim();
+      const obj = JSON.parse(jsonText) as { items: AiItem[] };
+      return Array.isArray(obj.items) ? obj.items : [];
+    } catch { return []; }
+  };
 
-  interface AiItem {
-    articleCode: string;
-    quantity: number;
-    confidence: number;
-    reasoning?: string;
-  }
+  // Run all batches in parallel
+  const batchResults = await Promise.allSettled(
+    batches.map(async (batchRefs) => {
+      const content: ContentBlock[] = [];
+      content.push({ type: "text", text: "You are a footwear inventory assistant. The FIRST image is the SALE PHOTO — identify every distinct footwear item in it and match to the catalog." });
+      content.push({ type: "image", source: { type: "base64", media_type: mediaType, data: rawBase64 } });
+      if (batchRefs.length > 0) {
+        content.push({ type: "text", text: "REFERENCE PHOTOS from the catalog (each labelled with its article code):" });
+        for (const ref of batchRefs) {
+          content.push({ type: "text", text: `[${ref.articleCode}]` });
+          content.push({ type: "image", source: { type: "url", url: ref.imageUrl } });
+        }
+      }
+      content.push({ type: "text", text: INSTRUCTIONS });
+      const msg = await anthropic.messages.create({
+        model: "claude-sonnet-4-6",
+        max_tokens: 4096,
+        messages: [{ role: "user", content }],
+      });
+      const block = msg.content[0];
+      return block.type === "text" ? parseAiResponse(block.text) : [];
+    })
+  );
 
-  let aiItems: AiItem[] = [];
-  try {
-    const block = message.content[0];
-    if (block.type === "text") {
-      const jsonText = block.text.trim().replace(/^```json\s*/i, "").replace(/```\s*$/, "").trim();
-      const parsed = JSON.parse(jsonText) as { items: AiItem[] };
-      aiItems = Array.isArray(parsed.items) ? parsed.items : [];
+  // Merge: for each articleCode keep the highest-confidence detection across all batches
+  const bestByCode = new Map<string, AiItem>();
+  for (const result of batchResults) {
+    if (result.status !== "fulfilled") continue;
+    for (const item of result.value) {
+      if (!item.articleCode || item.articleCode === "UNKNOWN") continue;
+      const existing = bestByCode.get(item.articleCode);
+      if (!existing || (item.confidence ?? 0) > (existing.confidence ?? 0)) {
+        bestByCode.set(item.articleCode, item);
+      }
     }
-  } catch {
-    req.log.warn("Failed to parse AI response for sale analysis");
   }
 
-  const detectedItems = aiItems.map((item) => {
+  const mergedItems = Array.from(bestByCode.values());
+  req.log.info({ batches: batches.length, detected: mergedItems.length }, "Sale analysis complete");
+
+  const detectedItems = mergedItems.map((item) => {
     const matchedProduct = productList.find(p => p.articleCode === item.articleCode) ?? null;
     return {
       articleCode: item.articleCode,
-      quantity: Math.max(1, Math.round(item.quantity)),
+      quantity: Math.max(1, Math.round(item.quantity ?? 1)),
       confidence: Math.round((item.confidence ?? 0.5) * 100) / 100,
+      reasoning: item.reasoning,
       matchedProduct: matchedProduct ?? undefined,
       notFound: !matchedProduct || item.articleCode === "UNKNOWN",
     };
   });
+
+  // Sort by confidence descending
+  detectedItems.sort((a, b) => b.confidence - a.confidence);
 
   res.json({
     detectedItems,
