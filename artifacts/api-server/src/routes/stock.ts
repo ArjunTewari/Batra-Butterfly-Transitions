@@ -595,8 +595,13 @@ Return this exact JSON format:
     }
   }
 
-  const mergedItems = Array.from(bestByCode.values());
-  req.log.info({ batches: activeBatches.length, detected: mergedItems.length }, "Sale analysis complete");
+  // Keep only the single highest-confidence result across all batches.
+  // Each batch picks its best match from its ~36 refs; lower-confidence results
+  // from other batches are false positives from having different reference sets.
+  const allMerged = Array.from(bestByCode.values()).sort((a, b) => (b.confidence ?? 0) - (a.confidence ?? 0));
+  const topItem = allMerged[0];
+  const mergedItems = topItem ? [topItem] : [];
+  req.log.info({ batches: activeBatches.length, candidates: allMerged.length, detected: mergedItems.length }, "Sale analysis complete");
 
   const detectedItems = mergedItems.map((item) => {
     const matchedProduct = productList.find(p => p.articleCode === item.articleCode) ?? null;
@@ -610,7 +615,7 @@ Return this exact JSON format:
     };
   });
 
-  // Sort by confidence descending
+  // Already sorted by confidence (only 1 item, but kept for consistency)
   detectedItems.sort((a, b) => b.confidence - a.confidence);
 
   res.json({
