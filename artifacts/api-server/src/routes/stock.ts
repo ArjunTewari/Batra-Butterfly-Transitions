@@ -526,16 +526,17 @@ ${articleCodeList || "(no products yet)"}
 
 Instructions:
 - Look at the SALE PHOTO (first image). Identify every DISTINCT shoe model/style visible.
-- For each item you see, find the best matching article code by visually comparing it against the REFERENCE PHOTOS shown above (each labelled with its article code).
-- If no reference photo matches, use the article code from the text list that best fits by description.
-- Estimate the quantity of each distinct article visible in the sale photo.
-- Only use "UNKNOWN" if the item truly matches nothing in the catalog.
+- For EACH visible item, compare it against the REFERENCE PHOTOS above (labelled with article codes).
+- ONLY include an item in your response if a reference photo is a clear visual match (same style, colour, strap pattern, sole). Confidence must be ≥ 0.85.
+- If NONE of the reference photos closely match a visible item, do NOT include that item — return an empty items array for this batch rather than guessing.
+- Do NOT force a match just because it is the "closest" reference — only include genuine matches.
+- Estimate the quantity of each matched article visible in the sale photo.
 - Return ONLY valid JSON, no markdown, no explanation.
 
 Return this exact JSON format:
 {
   "items": [
-    { "articleCode": "1053/45", "quantity": 2, "confidence": 0.88, "reasoning": "Brief visual match reason" }
+    { "articleCode": "1053/45", "quantity": 2, "confidence": 0.92, "reasoning": "Same beige slide with gold buckle" }
   ]
 }`;
 
@@ -595,12 +596,12 @@ Return this exact JSON format:
     }
   }
 
-  // Keep only the single highest-confidence result across all batches.
-  // Each batch picks its best match from its ~36 refs; lower-confidence results
-  // from other batches are false positives from having different reference sets.
+  // Filter to only high-confidence matches (≥85%).
+  // Genuine matches score 90%+ when their reference is in the batch.
+  // False positives from batches that lack the right reference score below 85%.
+  const CONFIDENCE_THRESHOLD = 0.85;
   const allMerged = Array.from(bestByCode.values()).sort((a, b) => (b.confidence ?? 0) - (a.confidence ?? 0));
-  const topItem = allMerged[0];
-  const mergedItems = topItem ? [topItem] : [];
+  const mergedItems = allMerged.filter(item => (item.confidence ?? 0) >= CONFIDENCE_THRESHOLD);
   req.log.info({ batches: activeBatches.length, candidates: allMerged.length, detected: mergedItems.length }, "Sale analysis complete");
 
   const detectedItems = mergedItems.map((item) => {
