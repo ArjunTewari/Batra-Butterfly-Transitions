@@ -479,26 +479,21 @@ router.post("/stock/analyze-sale", requireAuth, async (req, res): Promise<void> 
   const { rawBase64, mediaType } = parseBase64Image(imageBase64);
   const articleCodeList = productList.map(p => `${p.articleCode} (${p.name}, stock: ${p.currentStock})`).join("\n");
 
-  // Build reference list from Cloudinary catalog (all products, all images).
+  // Build reference list from Cloudinary catalog — 1 image per product.
+  // Smaller batches (≤40 refs each) give Claude much better detection accuracy.
   // Cloudinary URLs work with Anthropic (no robots.txt block).
-  // Use ALL Cloudinary images for every product to maximise accuracy.
   interface RefEntry { articleCode: string; imageUrl: string }
   const allRefs: RefEntry[] = [];
   for (const [code, urls] of cloudinaryImageMap.entries()) {
-    for (const url of urls) {
-      allRefs.push({ articleCode: code, imageUrl: url });
-    }
+    if (urls[0]) allRefs.push({ articleCode: code, imageUrl: urls[0] });
   }
 
-  // Claude allows ~100 images per request (1 sale photo + 99 refs).
-  // Split all refs into batches of 90 and run every batch in parallel.
-  const BATCH_SIZE = 90;
-  const batches: RefEntry[][] = [];
-  for (let i = 0; i < allRefs.length; i += BATCH_SIZE) {
-    batches.push(allRefs.slice(i, i + BATCH_SIZE));
-  }
-  // If no Cloudinary refs, use one empty batch so we still get a text-only result
-  if (batches.length === 0) batches.push([]);
+  // Split into exactly 4 parallel batches
+  const NUM_BATCHES = 4;
+  const batches: RefEntry[][] = [[], [], [], []];
+  allRefs.forEach((ref, i) => batches[i % NUM_BATCHES].push(ref));
+  // If no Cloudinary refs, fall back to one empty batch (text-only)
+  const activeBatches = batches.some(b => b.length > 0) ? batches : [[]];
 
   type ContentBlock =
     | { type: "image"; source: { type: "base64"; media_type: "image/jpeg" | "image/png" | "image/gif" | "image/webp"; data: string } }
@@ -535,12 +530,18 @@ Return this exact JSON format:
 
   // Run all batches in parallel
   const batchResults = await Promise.allSettled(
-    batches.map(async (batchRefs) => {
+    activeBatches.map(async (batchRefs, batchIdx) => {
       const content: ContentBlock[] = [];
-      content.push({ type: "text", text: "You are a footwear inventory assistant. The FIRST image is the SALE PHOTO — identify every distinct footwear item in it and match to the catalog." });
+      content.push({
+        type: "text",
+        text: "You are a footwear inventory expert. The FIRST image is the SALE PHOTO. Your job is to identify every distinct footwear item visible in that photo and match it to the catalog.",
+      });
       content.push({ type: "image", source: { type: "base64", media_type: mediaType, data: rawBase64 } });
       if (batchRefs.length > 0) {
-        content.push({ type: "text", text: "REFERENCE PHOTOS from the catalog (each labelled with its article code):" });
+        content.push({
+          type: "text",
+          text: `Below are ${batchRefs.length} REFERENCE PHOTOS from the catalog. Each reference image is preceded by its article code in square brackets. Visually compare each item in the SALE PHOTO to these references.`,
+        });
         for (const ref of batchRefs) {
           content.push({ type: "text", text: `[${ref.articleCode}]` });
           content.push({ type: "image", source: { type: "url", url: ref.imageUrl } });
@@ -549,18 +550,23 @@ Return this exact JSON format:
       content.push({ type: "text", text: INSTRUCTIONS });
       const msg = await anthropic.messages.create({
         model: "claude-sonnet-4-6",
-        max_tokens: 4096,
+        max_tokens: 2048,
         messages: [{ role: "user", content }],
       });
       const block = msg.content[0];
-      return block.type === "text" ? parseAiResponse(block.text) : [];
+      const rawText = block.type === "text" ? block.text : "";
+      req.log.info({ batchIdx, refs: batchRefs.length, rawText }, "Batch AI response");
+      return parseAiResponse(rawText);
     })
   );
 
   // Merge: for each articleCode keep the highest-confidence detection across all batches
   const bestByCode = new Map<string, AiItem>();
   for (const result of batchResults) {
-    if (result.status !== "fulfilled") continue;
+    if (result.status === "rejected") {
+      req.log.warn({ reason: String(result.reason) }, "Batch failed");
+      continue;
+    }
     for (const item of result.value) {
       if (!item.articleCode || item.articleCode === "UNKNOWN") continue;
       const existing = bestByCode.get(item.articleCode);
@@ -571,7 +577,7 @@ Return this exact JSON format:
   }
 
   const mergedItems = Array.from(bestByCode.values());
-  req.log.info({ batches: batches.length, detected: mergedItems.length }, "Sale analysis complete");
+  req.log.info({ batches: activeBatches.length, detected: mergedItems.length }, "Sale analysis complete");
 
   const detectedItems = mergedItems.map((item) => {
     const matchedProduct = productList.find(p => p.articleCode === item.articleCode) ?? null;
