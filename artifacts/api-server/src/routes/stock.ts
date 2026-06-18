@@ -452,22 +452,22 @@ router.post("/stock/analyze-sale", requireAuth, async (req, res): Promise<void> 
   const { rawBase64, mediaType } = parseBase64Image(imageBase64);
   const articleCodeList = productList.map(p => `${p.articleCode} (${p.name}, stock: ${p.currentStock})`).join("\n");
 
-  // Reference images -- from Airtable attachment URLs directly
-  const REFERENCE_IMAGE_CAP = 30;
-  const IMAGES_PER_PRODUCT = 2;
-  const reference: Array<{ articleCode: string; name: string; image: string }> = [];
-  const prioritised = [...productList].sort((a, b) => b.currentStock - a.currentStock);
-  for (const p of prioritised) {
+  // Reference images — pass Airtable URLs directly (no download needed; Claude fetches them)
+  // Use up to 1 image per product, spread across ALL products with images (no stock-bias).
+  // Cap at 100 reference images to stay well within Claude's per-request limit.
+  const REFERENCE_IMAGE_CAP = 100;
+  const withImages = productList.filter((p) => p.images.length > 0);
+  // Shuffle so selection isn't biased toward alphabetical / Airtable order
+  const shuffled = withImages.sort(() => Math.random() - 0.5);
+  const reference: Array<{ articleCode: string; name: string; imageUrl: string }> = [];
+  for (const p of shuffled) {
     if (reference.length >= REFERENCE_IMAGE_CAP) break;
-    const imgs = p.images.slice(0, IMAGES_PER_PRODUCT);
-    for (const img of imgs) {
-      if (reference.length >= REFERENCE_IMAGE_CAP) break;
-      reference.push({ articleCode: p.articleCode, name: p.name, image: img });
-    }
+    reference.push({ articleCode: p.articleCode, name: p.name, imageUrl: p.images[0] });
   }
 
   type ContentBlock =
     | { type: "image"; source: { type: "base64"; media_type: "image/jpeg" | "image/png" | "image/gif" | "image/webp"; data: string } }
+    | { type: "image"; source: { type: "url"; url: string } }
     | { type: "text"; text: string };
 
   const content: ContentBlock[] = [];
@@ -481,20 +481,11 @@ router.post("/stock/analyze-sale", requireAuth, async (req, res): Promise<void> 
   if (reference.length > 0) {
     content.push({
       type: "text",
-      text: `Below are REFERENCE PHOTOS of known products from the catalog. Each reference is preceded by its article code. Compare the sale photo against these reference photos to find the closest visual match (color, pattern, strap style, sole, embellishments).`,
+      text: `Below are REFERENCE PHOTOS of known products from the catalog. Each reference is labelled with its article code. Compare the sale photo against these references to find the closest visual match (color, sole shape, strap style, embellishments, toe style).`,
     });
-    // Fetch all reference images in parallel
-    const refBase64 = await Promise.all(
-      reference.map(async (ref) => {
-        const fetched = await fetchImageAsBase64(ref.image);
-        return fetched ? { articleCode: ref.articleCode, name: ref.name, base64: fetched.base64, mediaType: fetched.mediaType } : null;
-      })
-    );
-    for (const ref of refBase64) {
-      if (!ref) continue;
-      const { rawBase64: refRaw, mediaType: refMime } = parseBase64Image(ref.base64);
-      content.push({ type: "text", text: `Reference — ${ref.articleCode} (${ref.name}):` });
-      content.push({ type: "image", source: { type: "base64", media_type: refMime, data: refRaw } });
+    for (const ref of reference) {
+      content.push({ type: "text", text: `[${ref.articleCode}]` });
+      content.push({ type: "image", source: { type: "url", url: ref.imageUrl } });
     }
   }
 
