@@ -6,10 +6,8 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { SaleDetectedItem } from "./saleDetectedItem";
-import type { StockItem } from "./stockItem";
 
 export interface SaleAnalysisResult {
   detectedItems: SaleDetectedItem[];
-  allProducts: StockItem[];
   imageUrl?: string;
 }

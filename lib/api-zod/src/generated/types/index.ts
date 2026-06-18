@@ -8,6 +8,7 @@
 
 export * from "./activityItem";
 export * from "./activityItemType";
+export * from "./airtableProduct";
 export * from "./analyzeImageBody";
 export * from "./analyzeInvoiceImageBody";
 export * from "./analyzeSaleImageBody";
@@ -50,8 +51,6 @@ export * from "./getStaffSalaryParams";
 export * from "./getTopRetailersParams";
 export * from "./healthStatus";
 export * from "./imageAnalysisResult";
-export * from "./importAirtableBody";
-export * from "./importAirtableResult";
 export * from "./invoiceAnalysisResult";
 export * from "./invoiceConfirmResult";
 export * from "./invoiceConfirmResultStockUpdatesItem";

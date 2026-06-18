@@ -7,7 +7,7 @@ import {
   useConfirmInvoice,
   useListRetailers,
   useListStaff,
-  getListStockQueryKey,
+  getListAirtableStockQueryKey,
   getListInvoicesQueryKey,
   getListRetailersQueryKey,
   tagPrices,
@@ -295,7 +295,7 @@ export default function StockSale() {
         onSuccess: (data) => {
           toast({ title: "Sale confirmed", description: data.message });
           resetPage();
-          queryClient.invalidateQueries({ queryKey: getListStockQueryKey() });
+          queryClient.invalidateQueries({ queryKey: getListAirtableStockQueryKey() });
         },
         onError: (err) => {
           toast({
@@ -358,7 +358,7 @@ export default function StockSale() {
                   title: "Invoice created & confirmed",
                   description: `Invoice ${invoiceNumber} posted. Stock deducted and ${selectedRetailer?.name}'s account updated.`,
                 });
-                queryClient.invalidateQueries({ queryKey: getListStockQueryKey() });
+                queryClient.invalidateQueries({ queryKey: getListAirtableStockQueryKey() });
                 queryClient.invalidateQueries({ queryKey: getListInvoicesQueryKey() });
                 queryClient.invalidateQueries({ queryKey: getListRetailersQueryKey() });
               },

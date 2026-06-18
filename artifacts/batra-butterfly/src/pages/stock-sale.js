@@ -1,13 +1,14 @@
 import { useState, useRef, useCallback } from "react";
 import { Link } from "wouter";
-import { useAnalyzeSaleImage, useConfirmSale, useCreateInvoice, useConfirmInvoice, useListRetailers, useListStaff, getListStockQueryKey, getListInvoicesQueryKey, getListRetailersQueryKey, } from "@workspace/api-client-react";
+import { useAnalyzeSaleImage, useConfirmSale, useCreateInvoice, useConfirmInvoice, useListRetailers, useListStaff, getListAirtableStockQueryKey, getListInvoicesQueryKey, getListRetailersQueryKey, tagPrices, } from "@workspace/api-client-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, } from "@/components/ui/select";
-import { ArrowLeft, Camera, Images, ShoppingBag, CheckCircle2, AlertCircle, Trash2, PackageOpen, Minus, Plus, FileText, Copy, Share2, Receipt, } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, } from "@/components/ui/dialog";
+import { ArrowLeft, Camera, Images, ShoppingBag, CheckCircle2, AlertCircle, Trash2, PackageOpen, Minus, Plus, FileText, Copy, Share2, Receipt, Tag, Download, } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
@@ -40,6 +41,9 @@ export default function StockSale() {
     const [invoiceConfirmed, setInvoiceConfirmed] = useState(false);
     const [confirmedInvoiceId, setConfirmedInvoiceId] = useState(null);
     const [confirmedInvoiceNumber, setConfirmedInvoiceNumber] = useState(null);
+    const [taggingPrices, setTaggingPrices] = useState(false);
+    const [taggedImage, setTaggedImage] = useState(null);
+    const [tagDialogOpen, setTagDialogOpen] = useState(false);
     const fileInputRef = useRef(null);
     const galleryInputRef = useRef(null);
     const queryClient = useQueryClient();
@@ -202,7 +206,7 @@ export default function StockSale() {
             onSuccess: (data) => {
                 toast({ title: "Sale confirmed", description: data.message });
                 resetPage();
-                queryClient.invalidateQueries({ queryKey: getListStockQueryKey() });
+                queryClient.invalidateQueries({ queryKey: getListAirtableStockQueryKey() });
             },
             onError: (err) => {
                 toast({
@@ -261,7 +265,7 @@ export default function StockSale() {
                             title: "Invoice created & confirmed",
                             description: `Invoice ${invoiceNumber} posted. Stock deducted and ${selectedRetailer === null || selectedRetailer === void 0 ? void 0 : selectedRetailer.name}'s account updated.`,
                         });
-                        queryClient.invalidateQueries({ queryKey: getListStockQueryKey() });
+                        queryClient.invalidateQueries({ queryKey: getListAirtableStockQueryKey() });
                         queryClient.invalidateQueries({ queryKey: getListInvoicesQueryKey() });
                         queryClient.invalidateQueries({ queryKey: getListRetailersQueryKey() });
                     },
@@ -283,6 +287,137 @@ export default function StockSale() {
             },
         });
     };
+    const renderTaggedImage = (dataUrl, tags) => new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => {
+            const W = img.naturalWidth;
+            const H = img.naturalHeight;
+            const MARGIN = Math.max(80, Math.round(H * 0.16));
+            const canvas = document.createElement("canvas");
+            canvas.width = W;
+            canvas.height = H + MARGIN * 2;
+            const ctx = canvas.getContext("2d");
+            if (!ctx) {
+                reject(new Error("Canvas not supported"));
+                return;
+            }
+            ctx.fillStyle = "#f4ede0";
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(img, 0, MARGIN, W, H);
+            const ACCENT = "#e0a23a";
+            const fontSize = Math.max(20, Math.round(W * 0.024));
+            ctx.font = `bold ${fontSize}px Georgia, serif`;
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            const topTags = tags.filter((t) => t.side === "top");
+            const bottomTags = tags.filter((t) => t.side !== "top");
+            const drawSide = (list, side) => {
+                const n = list.length || 1;
+                list.forEach((t, idx) => {
+                    const ax = (t.anchor_x / 100) * W;
+                    const ay = MARGIN + (t.anchor_y / 100) * H;
+                    const tagX = ((idx + 0.5) / n) * W;
+                    const tagY = side === "top" ? MARGIN / 2 : MARGIN + H + MARGIN / 2;
+                    // leader line
+                    ctx.strokeStyle = ACCENT;
+                    ctx.lineWidth = Math.max(1.5, W * 0.002);
+                    ctx.globalAlpha = 0.85;
+                    ctx.beginPath();
+                    ctx.moveTo(ax, ay);
+                    ctx.lineTo(tagX, tagY);
+                    ctx.stroke();
+                    ctx.globalAlpha = 1;
+                    // anchor dot
+                    ctx.fillStyle = ACCENT;
+                    ctx.beginPath();
+                    ctx.arc(ax, ay, Math.max(5, W * 0.005), 0, Math.PI * 2);
+                    ctx.fill();
+                    // tag pill
+                    const text = formatCurrency(t.price);
+                    const padX = fontSize * 0.7;
+                    const padY = fontSize * 0.5;
+                    const textW = ctx.measureText(text).width;
+                    const boxW = textW + padX * 2;
+                    const boxH = fontSize + padY * 2;
+                    const boxX = Math.min(Math.max(tagX - boxW / 2, 4), W - boxW - 4);
+                    const boxY = tagY - boxH / 2;
+                    const r = boxH * 0.28;
+                    ctx.fillStyle = ACCENT;
+                    ctx.beginPath();
+                    ctx.moveTo(boxX + r, boxY);
+                    ctx.arcTo(boxX + boxW, boxY, boxX + boxW, boxY + boxH, r);
+                    ctx.arcTo(boxX + boxW, boxY + boxH, boxX, boxY + boxH, r);
+                    ctx.arcTo(boxX, boxY + boxH, boxX, boxY, r);
+                    ctx.arcTo(boxX, boxY, boxX + boxW, boxY, r);
+                    ctx.closePath();
+                    ctx.fill();
+                    ctx.fillStyle = "#2a1c0c";
+                    ctx.fillText(text, boxX + boxW / 2, boxY + boxH / 2 + 1);
+                });
+            };
+            drawSide(topTags, "top");
+            drawSide(bottomTags, "bottom");
+            resolve(canvas.toDataURL("image/png"));
+        };
+        img.onerror = () => reject(new Error("Could not load image"));
+        img.src = dataUrl;
+    });
+    const handleTagPrices = async () => {
+        if (!imageBase64 || validItems.length === 0) {
+            toast({ variant: "destructive", title: "Nothing to tag", description: "Upload a sale photo with detected items first." });
+            return;
+        }
+        setTaggingPrices(true);
+        try {
+            const res = await tagPrices({
+                imageBase64,
+                items: validItems.map((item) => {
+                    var _a, _b, _c, _d;
+                    return ({
+                        articleCode: item.articleCode,
+                        price: (_b = (_a = item.matchedProduct) === null || _a === void 0 ? void 0 : _a.price) !== null && _b !== void 0 ? _b : 0,
+                        label: (_d = (_c = item.matchedProduct) === null || _c === void 0 ? void 0 : _c.name) !== null && _d !== void 0 ? _d : item.articleCode,
+                    });
+                }),
+            });
+            const png = await renderTaggedImage(imageBase64, res.tags);
+            setTaggedImage(png);
+            setTagDialogOpen(true);
+        }
+        catch (err) {
+            toast({
+                variant: "destructive",
+                title: "Could not tag prices",
+                description: (err === null || err === void 0 ? void 0 : err.message) || "Price tagging failed. Try again.",
+            });
+        }
+        finally {
+            setTaggingPrices(false);
+        }
+    };
+    const handleDownloadTagged = () => {
+        if (!taggedImage)
+            return;
+        const a = document.createElement("a");
+        a.href = taggedImage;
+        a.download = `price-tags-${Date.now()}.png`;
+        a.click();
+    };
+    const handleShareTagged = async () => {
+        var _a;
+        if (!taggedImage)
+            return;
+        try {
+            const blob = await (await fetch(taggedImage)).blob();
+            const file = new File([blob], `price-tags-${Date.now()}.png`, { type: "image/png" });
+            if ((_a = navigator.canShare) === null || _a === void 0 ? void 0 : _a.call(navigator, { files: [file] })) {
+                await navigator.share({ files: [file], title: "Price Tags" });
+                return;
+            }
+        }
+        catch { /* fall through to download */ }
+        handleDownloadTagged();
+    };
     const resetPage = () => {
         setImagePreview(null);
         setImageBase64(null);
@@ -294,6 +429,8 @@ export default function StockSale() {
         setInvoiceConfirmed(false);
         setConfirmedInvoiceId(null);
         setConfirmedInvoiceNumber(null);
+        setTaggedImage(null);
+        setTagDialogOpen(false);
         if (fileInputRef.current)
             fileInputRef.current.value = "";
         if (galleryInputRef.current)
@@ -424,6 +561,14 @@ export default function StockSale() {
                     </div>
                     <Button onClick={handleQuickSale} disabled={confirmSale.isPending || totalUnits === 0} variant="outline" className="w-full border-white/10 text-white hover:bg-white/5 text-sm py-2">
                       {confirmSale.isPending ? "Processing..." : "Quick Sale (no invoice)"}
+                    </Button>
+                    <Button onClick={handleTagPrices} disabled={taggingPrices || validItems.length === 0 || !imageBase64} variant="outline" className="w-full border-amber-500/30 text-amber-300 hover:bg-amber-500/10 text-sm py-2" data-testid="button-tag-prices">
+                      {taggingPrices ? (<span className="flex items-center gap-2">
+                          <div className="h-4 w-4 border-2 border-amber-300/30 border-t-amber-300 rounded-full animate-spin"/>
+                          Tagging prices…
+                        </span>) : (<>
+                          <Tag className="mr-2 h-4 w-4"/> Tag Prices on Photo
+                        </>)}
                     </Button>
                   </div>
                 </motion.div>)}
@@ -593,5 +738,29 @@ export default function StockSale() {
           </CardContent>
         </Card>
       </div>
+
+      <Dialog open={tagDialogOpen} onOpenChange={setTagDialogOpen}>
+        <DialogContent className="bg-black border border-white/10 text-white sm:max-w-[560px]">
+          <DialogHeader>
+            <DialogTitle>Price-tagged photo</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-2">
+            {taggedImage && (<div className="rounded-lg overflow-hidden border border-white/10 bg-white/[0.02]">
+                <img src={taggedImage} alt="Price-tagged sale" className="w-full h-auto"/>
+              </div>)}
+            <p className="text-xs text-gray-500">
+              This image is for sharing only — it is not stored or attached to the invoice.
+            </p>
+            <div className="flex gap-2">
+              <Button variant="outline" className="flex-1 border-white/10 text-white hover:bg-white/5" onClick={handleDownloadTagged} data-testid="button-download-tagged">
+                <Download className="mr-1.5 h-4 w-4"/> Download PNG
+              </Button>
+              <Button className="flex-1 bg-white text-black hover:bg-gray-200" onClick={handleShareTagged} data-testid="button-share-tagged">
+                <Share2 className="mr-1.5 h-4 w-4"/> Share
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>);
 }

@@ -18,6 +18,7 @@ import type {
 
 import type {
   ActivityItem,
+  AirtableProduct,
   AnalyzeImageBody,
   AnalyzeInvoiceImageBody,
   AnalyzeSaleImageBody,
@@ -52,8 +53,6 @@ import type {
   GetTopRetailersParams,
   HealthStatus,
   ImageAnalysisResult,
-  ImportAirtableBody,
-  ImportAirtableResult,
   InvoiceAnalysisResult,
   InvoiceConfirmResult,
   InvoiceWithItems,
@@ -3048,90 +3047,79 @@ export const useConfirmSale = <
 };
 
 /**
- * @summary Import one page of products from Airtable into the account inventory
+ * @summary Live Airtable product catalog merged with local stock
  */
-export const getImportAirtableUrl = () => {
-  return `/api/stock/import-airtable`;
+export const getListAirtableStockUrl = () => {
+  return `/api/stock/airtable`;
 };
 
-export const importAirtable = async (
-  importAirtableBody: ImportAirtableBody,
+export const listAirtableStock = async (
   options?: RequestInit,
-): Promise<ImportAirtableResult> => {
-  return customFetch<ImportAirtableResult>(getImportAirtableUrl(), {
+): Promise<AirtableProduct[]> => {
+  return customFetch<AirtableProduct[]>(getListAirtableStockUrl(), {
     ...options,
-    method: "POST",
-    headers: { "Content-Type": "application/json", ...options?.headers },
-    body: JSON.stringify(importAirtableBody),
+    method: "GET",
   });
 };
 
-export const getImportAirtableMutationOptions = <
-  TError = ErrorType<unknown>,
-  TContext = unknown,
->(options?: {
-  mutation?: UseMutationOptions<
-    Awaited<ReturnType<typeof importAirtable>>,
-    TError,
-    { data: BodyType<ImportAirtableBody> },
-    TContext
-  >;
-  request?: SecondParameter<typeof customFetch>;
-}): UseMutationOptions<
-  Awaited<ReturnType<typeof importAirtable>>,
-  TError,
-  { data: BodyType<ImportAirtableBody> },
-  TContext
-> => {
-  const mutationKey = ["importAirtable"];
-  const { mutation: mutationOptions, request: requestOptions } = options
-    ? options.mutation &&
-      "mutationKey" in options.mutation &&
-      options.mutation.mutationKey
-      ? options
-      : { ...options, mutation: { ...options.mutation, mutationKey } }
-    : { mutation: { mutationKey }, request: undefined };
-
-  const mutationFn: MutationFunction<
-    Awaited<ReturnType<typeof importAirtable>>,
-    { data: BodyType<ImportAirtableBody> }
-  > = (props) => {
-    const { data } = props ?? {};
-
-    return importAirtable(data, requestOptions);
-  };
-
-  return { mutationFn, ...mutationOptions };
+export const getListAirtableStockQueryKey = () => {
+  return [`/api/stock/airtable`] as const;
 };
 
-export type ImportAirtableMutationResult = NonNullable<
-  Awaited<ReturnType<typeof importAirtable>>
+export const getListAirtableStockQueryOptions = <
+  TData = Awaited<ReturnType<typeof listAirtableStock>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listAirtableStock>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListAirtableStockQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listAirtableStock>>
+  > = ({ signal }) => listAirtableStock({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listAirtableStock>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListAirtableStockQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listAirtableStock>>
 >;
-export type ImportAirtableMutationBody = BodyType<ImportAirtableBody>;
-export type ImportAirtableMutationError = ErrorType<unknown>;
+export type ListAirtableStockQueryError = ErrorType<unknown>;
 
 /**
- * @summary Import one page of products from Airtable into the account inventory
+ * @summary Live Airtable product catalog merged with local stock
  */
-export const useImportAirtable = <
+
+export function useListAirtableStock<
+  TData = Awaited<ReturnType<typeof listAirtableStock>>,
   TError = ErrorType<unknown>,
-  TContext = unknown,
 >(options?: {
-  mutation?: UseMutationOptions<
-    Awaited<ReturnType<typeof importAirtable>>,
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listAirtableStock>>,
     TError,
-    { data: BodyType<ImportAirtableBody> },
-    TContext
+    TData
   >;
   request?: SecondParameter<typeof customFetch>;
-}): UseMutationResult<
-  Awaited<ReturnType<typeof importAirtable>>,
-  TError,
-  { data: BodyType<ImportAirtableBody> },
-  TContext
-> => {
-  return useMutation(getImportAirtableMutationOptions(options));
-};
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListAirtableStockQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
 
 /**
  * @summary Detect each footwear pair in a photo and return price-tag anchor points

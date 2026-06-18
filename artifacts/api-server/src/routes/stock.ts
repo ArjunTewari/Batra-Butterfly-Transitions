@@ -7,7 +7,6 @@ import {
   ConfirmStockMovementBody,
   AnalyzeSaleImageBody,
   ConfirmSaleBody,
-  ImportAirtableBody,
   TagPricesBody,
 } from "@workspace/api-zod";
 import { anthropic } from "@workspace/integrations-anthropic-ai";
@@ -22,9 +21,8 @@ const AIRTABLE_SOURCES: ReadonlyArray<{ baseId: string; tableId: string }> = [
   { baseId: "appuqLiFCocS0gkgt", tableId: "tblEGjtkcy0SrQhwB" },
   { baseId: "appC9aBBwrRu5yBrT", tableId: "tblZTV0LAUwi3CQOQ" },
 ];
-const AIRTABLE_PAGE_SIZE = 20;
+const AIRTABLE_PAGE_SIZE = 100;
 const MAX_IMAGES_PER_PRODUCT = 2;
-const AIRTABLE_OPENING_STOCK = 6;
 const MAX_TAG_IMAGE_BASE64_CHARS = 12 * 1024 * 1024; // ~9 MB decoded
 const MAX_TAG_ITEMS = 60;
 
@@ -53,63 +51,56 @@ function toText(v: unknown): string {
   return String(v).trim();
 }
 
-const MAX_IMAGE_BYTES = 3 * 1024 * 1024; // 3 MB per downloaded image
-const IMAGE_FETCH_TIMEOUT_MS = 10_000;
+/* ─────────────────────── Airtable live catalog helpers ───────────────────── */
 
-// Only allow downloading attachment images from Airtable-owned hosts. This blocks
-// SSRF via crafted attachment URLs (internal/loopback/metadata endpoints).
-function isAllowedAirtableImageUrl(raw: string): boolean {
-  let u: URL;
-  try {
-    u = new URL(raw);
-  } catch {
-    return false;
-  }
-  if (u.protocol !== "https:") return false;
-  const host = u.hostname.toLowerCase();
-  return (
-    host === "airtable.com" ||
-    host.endsWith(".airtable.com") ||
-    host === "airtableusercontent.com" ||
-    host.endsWith(".airtableusercontent.com")
-  );
+interface AirtableProduct {
+  articleCode: string;
+  name: string;
+  price: number;
+  purchasePrice: number | null;
+  images: string[];
+  supplierName: string;
 }
 
-async function fetchImageAsDataUrl(url: string): Promise<string | null> {
-  if (!isAllowedAirtableImageUrl(url)) return null;
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), IMAGE_FETCH_TIMEOUT_MS);
-  try {
-    const resp = await fetch(url, { signal: controller.signal, redirect: "error" });
-    if (!resp.ok) return null;
-    const contentType = resp.headers.get("content-type") || "image/jpeg";
-    if (!contentType.startsWith("image/")) return null;
-    const lenHeader = resp.headers.get("content-length");
-    if (lenHeader && Number(lenHeader) > MAX_IMAGE_BYTES) return null;
-    if (!resp.body) return null;
-    const reader = resp.body.getReader();
-    const chunks: Uint8Array[] = [];
-    let total = 0;
+// Fetch ALL records from both Airtable tables (max 200 total).  No pagination
+// in the response — we stream everything into one array.
+async function fetchAirtableProducts(): Promise<AirtableProduct[]> {
+  const apiKey = process.env.AIRTABLE_API_KEY;
+  if (!apiKey) return [];
+  const products: AirtableProduct[] = [];
+  for (const source of AIRTABLE_SOURCES) {
+    let offset: string | undefined;
     for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      if (value) {
-        total += value.length;
-        if (total > MAX_IMAGE_BYTES) {
-          await reader.cancel().catch(() => {});
-          return null;
-        }
-        chunks.push(value);
+      const url = new URL(`https://api.airtable.com/v0/${source.baseId}/${source.tableId}`);
+      url.searchParams.set("pageSize", String(AIRTABLE_PAGE_SIZE));
+      if (offset) url.searchParams.set("offset", offset);
+      const resp = await fetch(url, { headers: { Authorization: `Bearer ${apiKey}` } });
+      if (!resp.ok) break;
+      const data = (await resp.json()) as { records?: AirtableRecord[]; offset?: string };
+      const records = Array.isArray(data.records) ? data.records : [];
+      for (const rec of records) {
+        const f = rec.fields ?? {};
+        const articleCode = toText(f["Product code"]);
+        if (!articleCode) continue;
+        const attachments = (Array.isArray(f["Attachments"]) ? f["Attachments"] : []) as AirtableAttachment[];
+        const images = attachments
+          .map((a) => a?.thumbnails?.large?.url || a?.url)
+          .filter((u): u is string => typeof u === "string")
+          .slice(0, MAX_IMAGES_PER_PRODUCT);
+        products.push({
+          articleCode,
+          name: articleCode,
+          price: toNumber(f["Selling Rate"]),
+          purchasePrice: toNumber(f["Purchase Rate"]) || null,
+          images,
+          supplierName: toText(f["Supplier Name"]),
+        });
       }
+      offset = data.offset ?? undefined;
+      if (!offset) break;
     }
-    if (total === 0) return null;
-    const buf = Buffer.concat(chunks);
-    return `data:${contentType};base64,${buf.toString("base64")}`;
-  } catch {
-    return null;
-  } finally {
-    clearTimeout(timer);
   }
+  return products;
 }
 
 function parseBase64Image(imageBase64: string): { rawBase64: string; mediaType: "image/jpeg" | "image/png" | "image/gif" | "image/webp" } {
@@ -135,6 +126,28 @@ router.get("/stock", requireAuth, async (req, res): Promise<void> => {
     imageUrl: p.imageUrl ?? null,
     createdAt: p.createdAt.toISOString(),
   })));
+});
+
+// Live Airtable catalog — no import, just read and return
+router.get("/stock/airtable", requireAuth, async (req, res): Promise<void> => {
+  const airtableProducts = await fetchAirtableProducts();
+  const localProducts = await db.select().from(productsTable).where(eq(productsTable.accountId, req.session.accountId!));
+  // Merge local stock into Airtable products
+  const merged = airtableProducts.map((ap) => {
+    const local = localProducts.find((lp) => lp.articleCode === ap.articleCode);
+    return {
+      articleCode: ap.articleCode,
+      name: ap.name,
+      price: ap.price,
+      purchasePrice: ap.purchasePrice,
+      currentStock: local?.currentStock ?? 0,
+      imageUrl: ap.images[0] ?? null,
+      images: ap.images,
+      supplierName: ap.supplierName,
+      localId: local?.id ?? null,
+    };
+  });
+  res.json(merged);
 });
 
 router.post("/stock", requireAuth, async (req, res): Promise<void> => {
@@ -404,53 +417,34 @@ router.post("/stock/analyze-sale", requireAuth, async (req, res): Promise<void> 
     return;
   }
 
-  const allProducts = await db.select().from(productsTable).where(eq(productsTable.accountId, accountId)).orderBy(productsTable.name);
-  const productList = allProducts.map((p) => ({
-    id: p.id,
-    articleCode: p.articleCode,
-    name: p.name,
-    price: parseFloat(p.price),
-    currentStock: p.currentStock,
-    imageUrl: p.imageUrl ?? null,
-    createdAt: p.createdAt.toISOString(),
-  }));
+  // Pull the catalog from Airtable (not the local DB)
+  const airtableProducts = await fetchAirtableProducts();
+  const localProducts = await db.select().from(productsTable).where(eq(productsTable.accountId, accountId));
+  const productList = airtableProducts.map((ap) => {
+    const local = localProducts.find((lp) => lp.articleCode === ap.articleCode);
+    return {
+      articleCode: ap.articleCode,
+      name: ap.name,
+      price: ap.price,
+      currentStock: local?.currentStock ?? 0,
+      imageUrl: ap.images[0] ?? null,
+      images: ap.images,
+    };
+  });
 
   const { imageBase64 } = parsed.data;
   const { rawBase64, mediaType } = parseBase64Image(imageBase64);
   const articleCodeList = productList.map(p => `${p.articleCode} (${p.name}, stock: ${p.currentStock})`).join("\n");
 
-  // Gather reference images of known products so the AI can visually compare the
-  // sale photo against the actual catalog. This dramatically improves matching
-  // accuracy versus relying on the text article list alone.
+  // Reference images -- from Airtable attachment URLs directly
   const REFERENCE_IMAGE_CAP = 30;
   const IMAGES_PER_PRODUCT = 2;
-
-  const storedImages = await db
-    .select({
-      productId: productImagesTable.productId,
-      imageUrl: productImagesTable.imageUrl,
-    })
-    .from(productImagesTable)
-    .innerJoin(productsTable, and(eq(productImagesTable.productId, productsTable.id), eq(productsTable.accountId, accountId)));
-
-  const imagesByProduct = new Map<number, string[]>();
-  for (const row of storedImages) {
-    const list = imagesByProduct.get(row.productId) ?? [];
-    if (list.length < IMAGES_PER_PRODUCT) {
-      list.push(row.imageUrl);
-      imagesByProduct.set(row.productId, list);
-    }
-  }
-
-  // Build the reference list, prioritising in-stock products. Fall back to the
-  // product's primary imageUrl when no extra images are stored.
   const reference: Array<{ articleCode: string; name: string; image: string }> = [];
   const prioritised = [...productList].sort((a, b) => b.currentStock - a.currentStock);
   for (const p of prioritised) {
     if (reference.length >= REFERENCE_IMAGE_CAP) break;
-    const stored = imagesByProduct.get(p.id) ?? [];
-    const candidates = stored.length > 0 ? stored : (p.imageUrl ? [p.imageUrl] : []);
-    for (const img of candidates) {
+    const imgs = p.images.slice(0, IMAGES_PER_PRODUCT);
+    for (const img of imgs) {
       if (reference.length >= REFERENCE_IMAGE_CAP) break;
       reference.push({ articleCode: p.articleCode, name: p.name, image: img });
     }
@@ -549,7 +543,6 @@ Return this exact JSON format:
 
   res.json({
     detectedItems,
-    allProducts: productList,
     imageUrl: imageBase64,
   });
 });
@@ -565,6 +558,9 @@ router.post("/stock/confirm-sale", requireAuth, async (req, res): Promise<void> 
   const { items, imageUrl } = parsed.data;
   const movements = [];
 
+  // Lazy-create from Airtable catalog when product is missing locally
+  const airtableProducts = await fetchAirtableProducts();
+
   for (const item of items) {
     let product = item.productId
       ? (await db.select().from(productsTable).where(and(eq(productsTable.id, item.productId), eq(productsTable.accountId, accountId))))[0]
@@ -572,6 +568,23 @@ router.post("/stock/confirm-sale", requireAuth, async (req, res): Promise<void> 
 
     if (!product) {
       product = (await db.select().from(productsTable).where(and(eq(productsTable.articleCode, item.articleCode), eq(productsTable.accountId, accountId))))[0];
+    }
+
+    // Lazy-create from Airtable catalog if not found locally
+    if (!product) {
+      const at = airtableProducts.find((a) => a.articleCode === item.articleCode);
+      if (at) {
+        const [newProduct] = await db.insert(productsTable).values({
+          accountId,
+          articleCode: at.articleCode,
+          name: at.name,
+          price: String(at.price),
+          purchasePrice: at.purchasePrice != null ? String(at.purchasePrice) : null,
+          currentStock: 0,
+          imageUrl: at.images[0] ?? null,
+        }).returning();
+        product = newProduct;
+      }
     }
 
     if (!product) {
@@ -666,155 +679,6 @@ router.delete("/stock/products/:id", requireAuth, async (req, res): Promise<void
   await db.delete(productsTable).where(and(eq(productsTable.id, id), eq(productsTable.accountId, accountId)));
 
   res.status(204).end();
-});
-
-router.post("/stock/import-airtable", requireAuth, async (req, res): Promise<void> => {
-  const accountId = req.session.accountId!;
-  const parsed = ImportAirtableBody.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
-    return;
-  }
-
-  const apiKey = process.env.AIRTABLE_API_KEY;
-  if (!apiKey) {
-    res.status(500).json({ error: "AIRTABLE_API_KEY is not configured." });
-    return;
-  }
-
-  const { sourceIndex, offset } = parsed.data;
-  const source = AIRTABLE_SOURCES[sourceIndex];
-  if (!source) {
-    res.status(400).json({ error: "Invalid sourceIndex." });
-    return;
-  }
-
-  const url = new URL(`https://api.airtable.com/v0/${source.baseId}/${source.tableId}`);
-  url.searchParams.set("pageSize", String(AIRTABLE_PAGE_SIZE));
-  if (offset) url.searchParams.set("offset", offset);
-
-  const atResp = await fetch(url, { headers: { Authorization: `Bearer ${apiKey}` } });
-  if (!atResp.ok) {
-    const text = await atResp.text().catch(() => "");
-    req.log.error({ status: atResp.status, body: text.slice(0, 500) }, "Airtable fetch failed");
-    res.status(502).json({ error: `Airtable request failed (${atResp.status}).` });
-    return;
-  }
-
-  const data = (await atResp.json()) as { records?: AirtableRecord[]; offset?: string };
-  const records = Array.isArray(data.records) ? data.records : [];
-
-  // Cache suppliers for this page to avoid repeated lookups/inserts.
-  const supplierCache = new Map<string, number>();
-  const resolveSupplier = async (name: string): Promise<number | null> => {
-    if (!name) return null;
-    const cached = supplierCache.get(name);
-    if (cached) return cached;
-    const [existing] = await db
-      .select({ id: suppliersTable.id })
-      .from(suppliersTable)
-      .where(and(eq(suppliersTable.name, name), eq(suppliersTable.accountId, accountId)));
-    if (existing) {
-      supplierCache.set(name, existing.id);
-      return existing.id;
-    }
-    const [created] = await db
-      .insert(suppliersTable)
-      .values({ accountId, name, phone: null, address: null, gstin: null })
-      .returning();
-    supplierCache.set(name, created.id);
-    return created.id;
-  };
-
-  let imported = 0;
-  let updated = 0;
-  let skipped = 0;
-
-  for (const rec of records) {
-    const f = rec.fields ?? {};
-    const articleCode = toText(f["Product code"]);
-    if (!articleCode) {
-      skipped++;
-      continue;
-    }
-
-    const price = toNumber(f["Selling Rate"]);
-    const purchasePrice = toNumber(f["Purchase Rate"]);
-    const supplierName = toText(f["Supplier Name"]);
-
-    const attachments = (Array.isArray(f["Attachments"]) ? f["Attachments"] : []) as AirtableAttachment[];
-    const sourceUrls = attachments
-      .map((a) => a?.thumbnails?.large?.url || a?.url)
-      .filter((u): u is string => typeof u === "string")
-      .slice(0, MAX_IMAGES_PER_PRODUCT);
-    const dataUrls = (await Promise.all(sourceUrls.map(fetchImageAsDataUrl))).filter(
-      (u): u is string => u !== null,
-    );
-    const primaryImage = dataUrls[0] ?? null;
-
-    const [existing] = await db
-      .select()
-      .from(productsTable)
-      .where(and(eq(productsTable.articleCode, articleCode), eq(productsTable.accountId, accountId)));
-
-    if (existing) {
-      await db
-        .update(productsTable)
-        .set({
-          price: String(price),
-          purchasePrice: purchasePrice > 0 ? String(purchasePrice) : null,
-          imageUrl: existing.imageUrl ?? primaryImage,
-        })
-        .where(eq(productsTable.id, existing.id));
-      updated++;
-      continue;
-    }
-
-    // Supplier resolution is idempotent and cached; do it before the tx.
-    const supplierId = await resolveSupplier(supplierName);
-
-    // Product, its images, and the opening stock movement must be atomic.
-    await db.transaction(async (tx) => {
-      const [product] = await tx
-        .insert(productsTable)
-        .values({
-          accountId,
-          articleCode,
-          name: articleCode,
-          price: String(price),
-          purchasePrice: purchasePrice > 0 ? String(purchasePrice) : null,
-          currentStock: AIRTABLE_OPENING_STOCK,
-          imageUrl: primaryImage,
-        })
-        .returning();
-
-      for (const img of dataUrls) {
-        await tx.insert(productImagesTable).values({ productId: product.id, imageUrl: img });
-      }
-
-      await tx.insert(stockMovementsTable).values({
-        productId: product.id,
-        supplierId,
-        type: "in",
-        quantity: AIRTABLE_OPENING_STOCK,
-        imageUrl: primaryImage,
-        date: new Date(),
-      });
-    });
-
-    imported++;
-  }
-
-  const nextOffset = data.offset ?? null;
-  res.json({
-    sourceIndex,
-    imported,
-    updated,
-    skipped,
-    nextOffset,
-    totalSources: AIRTABLE_SOURCES.length,
-    done: !nextOffset,
-  });
 });
 
 router.post("/stock/tag-prices", requireAuth, async (req, res): Promise<void> => {

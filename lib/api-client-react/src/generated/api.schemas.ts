@@ -198,30 +198,19 @@ export interface AnalyzeSaleImageBody {
   imageBase64: string;
 }
 
-export interface ImportAirtableBody {
-  /** Which configured Airtable table to import (0-based) */
-  sourceIndex: number;
-  /** Airtable pagination cursor returned by the previous call */
-  offset?: string;
-}
-
-export interface ImportAirtableResult {
-  sourceIndex: number;
-  /** New products created in this page */
-  imported: number;
-  /** Existing products updated in this page */
-  updated: number;
-  /** Records skipped (missing product code) in this page */
-  skipped: number;
-  /**
-   * Cursor for the next page of this source; null when source is finished
-   * @nullable
-   */
-  nextOffset?: string | null;
-  /** Total number of configured Airtable sources */
-  totalSources: number;
-  /** True when this source has no more pages */
-  done: boolean;
+export interface AirtableProduct {
+  articleCode: string;
+  name: string;
+  price: number;
+  /** @nullable */
+  purchasePrice?: number | null;
+  currentStock: number;
+  /** @nullable */
+  imageUrl?: string | null;
+  images: string[];
+  supplierName: string;
+  /** @nullable */
+  localId: number | null;
 }
 
 export type TagPricesBodyItemsItem = {
@@ -269,7 +258,6 @@ export interface SaleDetectedItem {
 
 export interface SaleAnalysisResult {
   detectedItems: SaleDetectedItem[];
-  allProducts: StockItem[];
   imageUrl?: string;
 }
 

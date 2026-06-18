@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link } from "wouter";
-import { useListStock, getListStockQueryKey, useCreateStockItem, useDeleteStockItem, } from "@workspace/api-client-react";
+import { useCreateStockItem, useDeleteStockItem, useListAirtableStock, getListAirtableStockQueryKey, } from "@workspace/api-client-react";
 import { motion } from "framer-motion";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -15,6 +15,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { useQueryClient } from "@tanstack/react-query";
 import { Badge } from "@/components/ui/badge";
+import { useToast } from "@/hooks/use-toast";
 const formSchema = z.object({
     articleCode: z.string().min(1, "Article code is required"),
     name: z.string().min(2, "Name must be at least 2 characters"),
@@ -26,15 +27,16 @@ export default function Stock() {
     const [searchTerm, setSearchTerm] = useState("");
     const [isAddOpen, setIsAddOpen] = useState(false);
     const queryClient = useQueryClient();
-    const { data: stock, isLoading } = useListStock({
-        query: { queryKey: getListStockQueryKey() },
+    const { toast } = useToast();
+    const { data: stock, isLoading } = useListAirtableStock({
+        query: { queryKey: getListAirtableStockQueryKey() },
     });
     const createStockItem = useCreateStockItem();
     const deleteStockItem = useDeleteStockItem();
     const handleDelete = (id) => {
         deleteStockItem.mutate({ id }, {
             onSuccess: () => {
-                queryClient.invalidateQueries({ queryKey: getListStockQueryKey() });
+                queryClient.invalidateQueries({ queryKey: getListAirtableStockQueryKey() });
             },
         });
     };
@@ -53,7 +55,7 @@ export default function Stock() {
             onSuccess: () => {
                 setIsAddOpen(false);
                 form.reset();
-                queryClient.invalidateQueries({ queryKey: getListStockQueryKey() });
+                queryClient.invalidateQueries({ queryKey: getListAirtableStockQueryKey() });
             },
         });
     };
@@ -77,7 +79,7 @@ export default function Stock() {
             Stock Management
           </h1>
           <p className="text-gray-400 mt-1">
-            Manage footwear inventory and article codes
+            Live catalog from Airtable — stock is tracked locally
           </p>
         </div>
 
@@ -166,7 +168,7 @@ export default function Stock() {
       {isLoading ? (<div className="text-gray-400">Loading stock data...</div>) : (filteredStock === null || filteredStock === void 0 ? void 0 : filteredStock.length) === 0 ? (<div className="text-center py-12 text-gray-500 border border-white/5 rounded-lg border-dashed">
           No products found matching "{searchTerm}"
         </div>) : (<motion.div variants={container} initial="hidden" animate="show" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-          {filteredStock === null || filteredStock === void 0 ? void 0 : filteredStock.map((item) => (<motion.div key={item.id} variants={cardItem}>
+          {filteredStock === null || filteredStock === void 0 ? void 0 : filteredStock.map((item) => (<motion.div key={item.articleCode} variants={cardItem}>
               <Card className="bg-black border-white/10 hover:bg-white/[0.02] transition-colors group h-full">
                 <CardContent className="p-0">
                   <div className="h-32 bg-white/5 flex items-center justify-center relative overflow-hidden">
@@ -174,30 +176,30 @@ export default function Stock() {
                     <Badge className="absolute top-2 right-2 bg-black/60 backdrop-blur-md text-white border-white/10">
                       {item.articleCode}
                     </Badge>
-                    <AlertDialog>
-                      <AlertDialogTrigger asChild>
-                        <button type="button" className="absolute top-2 left-2 p-1.5 rounded-md bg-black/60 backdrop-blur-md text-gray-400 hover:text-red-400 hover:bg-black/80 transition-colors" data-testid={`button-delete-${item.id}`} aria-label="Delete product">
-                          <Trash2 className="h-4 w-4"/>
-                        </button>
-                      </AlertDialogTrigger>
-                      <AlertDialogContent className="bg-black border border-white/10 text-white">
-                        <AlertDialogHeader>
-                          <AlertDialogTitle>Delete "{item.name}"?</AlertDialogTitle>
-                          <AlertDialogDescription className="text-gray-400">
-                            This permanently removes the product, its photos, and its
-                            stock movement history. Past invoices are kept. This cannot be undone.
-                          </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                          <AlertDialogCancel className="bg-white/5 border-white/10 text-white hover:bg-white/10 hover:text-white">
-                            Cancel
-                          </AlertDialogCancel>
-                          <AlertDialogAction onClick={() => handleDelete(item.id)} className="bg-red-600 text-white hover:bg-red-700" data-testid={`button-confirm-delete-${item.id}`}>
-                            Delete
-                          </AlertDialogAction>
-                        </AlertDialogFooter>
-                      </AlertDialogContent>
-                    </AlertDialog>
+                    {item.localId != null && (<AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <button type="button" className="absolute top-2 left-2 p-1.5 rounded-md bg-black/60 backdrop-blur-md text-gray-400 hover:text-red-400 hover:bg-black/80 transition-colors" data-testid={`button-delete-${item.localId}`} aria-label="Delete product">
+                            <Trash2 className="h-4 w-4"/>
+                          </button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent className="bg-black border border-white/10 text-white">
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Delete "{item.name}"?</AlertDialogTitle>
+                            <AlertDialogDescription className="text-gray-400">
+                              This permanently removes the product, its photos, and its
+                              stock movement history. Past invoices are kept. This cannot be undone.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel className="bg-white/5 border-white/10 text-white hover:bg-white/10 hover:text-white">
+                              Cancel
+                            </AlertDialogCancel>
+                            <AlertDialogAction onClick={() => handleDelete(item.localId)} className="bg-red-600 text-white hover:bg-red-700" data-testid={`button-confirm-delete-${item.localId}`}>
+                              Delete
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>)}
                   </div>
                   <div className="p-4">
                     <h3 className="font-semibold text-lg truncate" title={item.name}>

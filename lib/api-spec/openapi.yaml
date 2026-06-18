@@ -698,24 +698,20 @@ paths:
               schema:
                 $ref: "#/components/schemas/ConfirmSaleResult"
 
-  /stock/import-airtable:
-    post:
-      operationId: importAirtable
+  /stock/airtable:
+    get:
+      operationId: listAirtableStock
       tags: [stock]
-      summary: Import one page of products from Airtable into the account inventory
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/ImportAirtableBody"
+      summary: Live Airtable product catalog merged with local stock
       responses:
         "200":
-          description: Page import result with cursor for the next page
+          description: Merged product list from Airtable and local stock
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ImportAirtableResult"
+                type: array
+                items:
+                  $ref: "#/components/schemas/AirtableProduct"
 
   /stock/tag-prices:
     post:
@@ -1615,48 +1611,37 @@ components:
       required:
         - imageBase64
 
-    ImportAirtableBody:
+    AirtableProduct:
       type: object
       properties:
-        sourceIndex:
-          type: integer
-          description: Which configured Airtable table to import (0-based)
-        offset:
+        articleCode:
           type: string
-          description: Airtable pagination cursor returned by the previous call
-      required:
-        - sourceIndex
-
-    ImportAirtableResult:
-      type: object
-      properties:
-        sourceIndex:
+        name:
+          type: string
+        price:
+          type: number
+        purchasePrice:
+          type: ["number", "null"]
+        currentStock:
           type: integer
-        imported:
-          type: integer
-          description: New products created in this page
-        updated:
-          type: integer
-          description: Existing products updated in this page
-        skipped:
-          type: integer
-          description: Records skipped (missing product code) in this page
-        nextOffset:
+        imageUrl:
           type: ["string", "null"]
-          description: Cursor for the next page of this source; null when source is finished
-        totalSources:
-          type: integer
-          description: Total number of configured Airtable sources
-        done:
-          type: boolean
-          description: True when this source has no more pages
+        images:
+          type: array
+          items:
+            type: string
+        supplierName:
+          type: string
+        localId:
+          type: ["integer", "null"]
       required:
-        - sourceIndex
-        - imported
-        - updated
-        - skipped
-        - totalSources
-        - done
+        - articleCode
+        - name
+        - price
+        - currentStock
+        - images
+        - supplierName
+        - localId
 
     TagPricesBody:
       type: object
@@ -1743,15 +1728,10 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/SaleDetectedItem"
-        allProducts:
-          type: array
-          items:
-            $ref: "#/components/schemas/StockItem"
         imageUrl:
           type: string
       required:
         - detectedItems
-        - allProducts
 
     ConfirmSaleBody:
       type: object

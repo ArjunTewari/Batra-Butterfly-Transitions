@@ -1,10 +1,85 @@
 import { Router } from "express";
 import { eq, desc, and } from "drizzle-orm";
 import { db, productsTable, stockMovementsTable, productImagesTable, suppliersTable } from "@workspace/db";
-import { CreateStockItemBody, AnalyzeStockImageBody, ConfirmStockMovementBody, AnalyzeSaleImageBody, ConfirmSaleBody, } from "@workspace/api-zod";
+import { CreateStockItemBody, AnalyzeStockImageBody, ConfirmStockMovementBody, AnalyzeSaleImageBody, ConfirmSaleBody, TagPricesBody, } from "@workspace/api-zod";
 import { anthropic } from "@workspace/integrations-anthropic-ai";
 import { requireAuth } from "../middleware/requireAuth";
+import { trackAiUsage } from "../lib/trackAiUsage";
 const router = Router();
+// Airtable source tables to import inventory from. Base/table IDs are not secret;
+// the access token is read from the AIRTABLE_API_KEY secret at request time.
+const AIRTABLE_SOURCES = [
+    { baseId: "appuqLiFCocS0gkgt", tableId: "tblEGjtkcy0SrQhwB" },
+    { baseId: "appC9aBBwrRu5yBrT", tableId: "tblZTV0LAUwi3CQOQ" },
+];
+const AIRTABLE_PAGE_SIZE = 100;
+const MAX_IMAGES_PER_PRODUCT = 2;
+const MAX_TAG_IMAGE_BASE64_CHARS = 12 * 1024 * 1024; // ~9 MB decoded
+const MAX_TAG_ITEMS = 60;
+function toNumber(v) {
+    if (typeof v === "number")
+        return Number.isFinite(v) ? v : 0;
+    if (typeof v === "string") {
+        const n = parseFloat(v.replace(/[^0-9.\-]/g, ""));
+        return Number.isFinite(n) ? n : 0;
+    }
+    return 0;
+}
+function toText(v) {
+    if (v == null)
+        return "";
+    if (typeof v === "string")
+        return v.trim();
+    if (typeof v === "number")
+        return String(v);
+    return String(v).trim();
+}
+// Fetch ALL records from both Airtable tables (max 200 total).  No pagination
+// in the response — we stream everything into one array.
+async function fetchAirtableProducts() {
+    var _a, _b;
+    const apiKey = process.env.AIRTABLE_API_KEY;
+    if (!apiKey)
+        return [];
+    const products = [];
+    for (const source of AIRTABLE_SOURCES) {
+        let offset;
+        for (;;) {
+            const url = new URL(`https://api.airtable.com/v0/${source.baseId}/${source.tableId}`);
+            url.searchParams.set("pageSize", String(AIRTABLE_PAGE_SIZE));
+            if (offset)
+                url.searchParams.set("offset", offset);
+            const resp = await fetch(url, { headers: { Authorization: `Bearer ${apiKey}` } });
+            if (!resp.ok)
+                break;
+            const data = (await resp.json());
+            const records = Array.isArray(data.records) ? data.records : [];
+            for (const rec of records) {
+                const f = (_a = rec.fields) !== null && _a !== void 0 ? _a : {};
+                const articleCode = toText(f["Product code"]);
+                if (!articleCode)
+                    continue;
+                const attachments = (Array.isArray(f["Attachments"]) ? f["Attachments"] : []);
+                const images = attachments
+                    .map((a) => { var _a, _b; return ((_b = (_a = a === null || a === void 0 ? void 0 : a.thumbnails) === null || _a === void 0 ? void 0 : _a.large) === null || _b === void 0 ? void 0 : _b.url) || (a === null || a === void 0 ? void 0 : a.url); })
+                    .filter((u) => typeof u === "string")
+                    .slice(0, MAX_IMAGES_PER_PRODUCT);
+                products.push({
+                    articleCode,
+                    name: articleCode,
+                    price: toNumber(f["Selling Rate"]),
+                    purchasePrice: toNumber(f["Purchase Rate"]) || null,
+                    images,
+                    supplierName: toText(f["Supplier Name"]),
+                });
+            }
+            offset = (_b = data.offset) !== null && _b !== void 0 ? _b : undefined;
+            if (!offset)
+                break;
+        }
+    }
+    return products;
+}
 function parseBase64Image(imageBase64) {
     const base64Match = imageBase64.match(/^data:([a-zA-Z0-9/+]+);base64,(.+)$/);
     const rawBase64 = base64Match ? base64Match[2] : imageBase64;
@@ -30,6 +105,28 @@ router.get("/stock", requireAuth, async (req, res) => {
             createdAt: p.createdAt.toISOString(),
         });
     }));
+});
+// Live Airtable catalog — no import, just read and return
+router.get("/stock/airtable", requireAuth, async (req, res) => {
+    const airtableProducts = await fetchAirtableProducts();
+    const localProducts = await db.select().from(productsTable).where(eq(productsTable.accountId, req.session.accountId));
+    // Merge local stock into Airtable products
+    const merged = airtableProducts.map((ap) => {
+        var _a, _b, _c;
+        const local = localProducts.find((lp) => lp.articleCode === ap.articleCode);
+        return {
+            articleCode: ap.articleCode,
+            name: ap.name,
+            price: ap.price,
+            purchasePrice: ap.purchasePrice,
+            currentStock: (_a = local === null || local === void 0 ? void 0 : local.currentStock) !== null && _a !== void 0 ? _a : 0,
+            imageUrl: (_b = ap.images[0]) !== null && _b !== void 0 ? _b : null,
+            images: ap.images,
+            supplierName: ap.supplierName,
+            localId: (_c = local === null || local === void 0 ? void 0 : local.id) !== null && _c !== void 0 ? _c : null,
+        };
+    });
+    res.json(merged);
 });
 router.post("/stock", requireAuth, async (req, res) => {
     var _a, _b;
@@ -275,59 +372,40 @@ router.post("/stock/confirm", requireAuth, async (req, res) => {
     });
 });
 router.post("/stock/analyze-sale", requireAuth, async (req, res) => {
-    var _a, _b;
     const accountId = req.session.accountId;
     const parsed = AnalyzeSaleImageBody.safeParse(req.body);
     if (!parsed.success) {
         res.status(400).json({ error: parsed.error.message });
         return;
     }
-    const allProducts = await db.select().from(productsTable).where(eq(productsTable.accountId, accountId)).orderBy(productsTable.name);
-    const productList = allProducts.map((p) => {
-        var _a;
-        return ({
-            id: p.id,
-            articleCode: p.articleCode,
-            name: p.name,
-            price: parseFloat(p.price),
-            currentStock: p.currentStock,
-            imageUrl: (_a = p.imageUrl) !== null && _a !== void 0 ? _a : null,
-            createdAt: p.createdAt.toISOString(),
-        });
+    // Pull the catalog from Airtable (not the local DB)
+    const airtableProducts = await fetchAirtableProducts();
+    const localProducts = await db.select().from(productsTable).where(eq(productsTable.accountId, accountId));
+    const productList = airtableProducts.map((ap) => {
+        var _a, _b;
+        const local = localProducts.find((lp) => lp.articleCode === ap.articleCode);
+        return {
+            articleCode: ap.articleCode,
+            name: ap.name,
+            price: ap.price,
+            currentStock: (_a = local === null || local === void 0 ? void 0 : local.currentStock) !== null && _a !== void 0 ? _a : 0,
+            imageUrl: (_b = ap.images[0]) !== null && _b !== void 0 ? _b : null,
+            images: ap.images,
+        };
     });
     const { imageBase64 } = parsed.data;
     const { rawBase64, mediaType } = parseBase64Image(imageBase64);
     const articleCodeList = productList.map(p => `${p.articleCode} (${p.name}, stock: ${p.currentStock})`).join("\n");
-    // Gather reference images of known products so the AI can visually compare the
-    // sale photo against the actual catalog. This dramatically improves matching
-    // accuracy versus relying on the text article list alone.
+    // Reference images -- from Airtable attachment URLs directly
     const REFERENCE_IMAGE_CAP = 30;
     const IMAGES_PER_PRODUCT = 2;
-    const storedImages = await db
-        .select({
-        productId: productImagesTable.productId,
-        imageUrl: productImagesTable.imageUrl,
-    })
-        .from(productImagesTable)
-        .innerJoin(productsTable, and(eq(productImagesTable.productId, productsTable.id), eq(productsTable.accountId, accountId)));
-    const imagesByProduct = new Map();
-    for (const row of storedImages) {
-        const list = (_a = imagesByProduct.get(row.productId)) !== null && _a !== void 0 ? _a : [];
-        if (list.length < IMAGES_PER_PRODUCT) {
-            list.push(row.imageUrl);
-            imagesByProduct.set(row.productId, list);
-        }
-    }
-    // Build the reference list, prioritising in-stock products. Fall back to the
-    // product's primary imageUrl when no extra images are stored.
     const reference = [];
     const prioritised = [...productList].sort((a, b) => b.currentStock - a.currentStock);
     for (const p of prioritised) {
         if (reference.length >= REFERENCE_IMAGE_CAP)
             break;
-        const stored = (_b = imagesByProduct.get(p.id)) !== null && _b !== void 0 ? _b : [];
-        const candidates = stored.length > 0 ? stored : (p.imageUrl ? [p.imageUrl] : []);
-        for (const img of candidates) {
+        const imgs = p.images.slice(0, IMAGES_PER_PRODUCT);
+        for (const img of imgs) {
             if (reference.length >= REFERENCE_IMAGE_CAP)
                 break;
             reference.push({ articleCode: p.articleCode, name: p.name, image: img });
@@ -410,12 +488,11 @@ Return this exact JSON format:
     });
     res.json({
         detectedItems,
-        allProducts: productList,
         imageUrl: imageBase64,
     });
 });
 router.post("/stock/confirm-sale", requireAuth, async (req, res) => {
-    var _a;
+    var _a, _b;
     const accountId = req.session.accountId;
     const parsed = ConfirmSaleBody.safeParse(req.body);
     if (!parsed.success) {
@@ -424,12 +501,30 @@ router.post("/stock/confirm-sale", requireAuth, async (req, res) => {
     }
     const { items, imageUrl } = parsed.data;
     const movements = [];
+    // Lazy-create from Airtable catalog when product is missing locally
+    const airtableProducts = await fetchAirtableProducts();
     for (const item of items) {
         let product = item.productId
             ? (await db.select().from(productsTable).where(and(eq(productsTable.id, item.productId), eq(productsTable.accountId, accountId))))[0]
             : undefined;
         if (!product) {
             product = (await db.select().from(productsTable).where(and(eq(productsTable.articleCode, item.articleCode), eq(productsTable.accountId, accountId))))[0];
+        }
+        // Lazy-create from Airtable catalog if not found locally
+        if (!product) {
+            const at = airtableProducts.find((a) => a.articleCode === item.articleCode);
+            if (at) {
+                const [newProduct] = await db.insert(productsTable).values({
+                    accountId,
+                    articleCode: at.articleCode,
+                    name: at.name,
+                    price: String(at.price),
+                    purchasePrice: at.purchasePrice != null ? String(at.purchasePrice) : null,
+                    currentStock: 0,
+                    imageUrl: (_a = at.images[0]) !== null && _a !== void 0 ? _a : null,
+                }).returning();
+                product = newProduct;
+            }
         }
         if (!product) {
             req.log.warn({ articleCode: item.articleCode }, "Product not found during sale confirmation, skipping");
@@ -451,7 +546,7 @@ router.post("/stock/confirm-sale", requireAuth, async (req, res) => {
             articleCode: product.articleCode,
             type: movement.type,
             quantity: movement.quantity,
-            imageUrl: (_a = movement.imageUrl) !== null && _a !== void 0 ? _a : null,
+            imageUrl: (_b = movement.imageUrl) !== null && _b !== void 0 ? _b : null,
             date: movement.date.toISOString(),
             createdAt: movement.createdAt.toISOString(),
         });
@@ -514,5 +609,93 @@ router.delete("/stock/products/:id", requireAuth, async (req, res) => {
     // is set to null, so invoice history is preserved.
     await db.delete(productsTable).where(and(eq(productsTable.id, id), eq(productsTable.accountId, accountId)));
     res.status(204).end();
+});
+router.post("/stock/tag-prices", requireAuth, async (req, res) => {
+    const accountId = req.session.accountId;
+    const parsed = TagPricesBody.safeParse(req.body);
+    if (!parsed.success) {
+        res.status(400).json({ error: parsed.error.message });
+        return;
+    }
+    const { imageBase64, items } = parsed.data;
+    // Bound payload to protect the AI call and server memory.
+    if (imageBase64.length > MAX_TAG_IMAGE_BASE64_CHARS) {
+        res.status(413).json({ error: "Image is too large. Please use an image under ~9 MB." });
+        return;
+    }
+    if (items.length > MAX_TAG_ITEMS) {
+        res.status(400).json({ error: `Too many items (max ${MAX_TAG_ITEMS}).` });
+        return;
+    }
+    if (items.length === 0) {
+        res.json({ tags: [] });
+        return;
+    }
+    const { rawBase64, mediaType } = parseBase64Image(imageBase64);
+    const itemList = items
+        .map((i, idx) => `${idx + 1}. ${i.articleCode} — ₹${i.price}${i.label ? ` (${i.label})` : ""}`)
+        .join("\n");
+    const message = await anthropic.messages.create({
+        model: "claude-haiku-4-5",
+        max_tokens: 2048,
+        messages: [
+            {
+                role: "user",
+                content: [
+                    { type: "image", source: { type: "base64", media_type: mediaType, data: rawBase64 } },
+                    {
+                        type: "text",
+                        text: `You are placing price tags on a footwear sale photo. The photo (above) shows one or more distinct footwear pairs/items. Below are the items sold in this photo with their article codes and selling prices:
+
+${itemList}
+
+For EACH distinct footwear pair/item visible in the photo, return a tag object with:
+- "anchor_x": horizontal CENTER of that pair as a percentage 0-100 of image WIDTH
+- "anchor_y": vertical CENTER of that pair as a percentage 0-100 of image HEIGHT
+- "side": "bottom" if the pair sits in the UPPER half of the image (so the tag hangs below it), or "top" if the pair sits in the LOWER half (so the tag floats above it) — pick whichever keeps the tag inside the image
+- "articleCode": the best matching article code from the list above; use "" if none clearly matches
+
+Match each visible pair to exactly one list item where possible. Return ONLY valid JSON, no markdown:
+{"tags":[{"anchor_x":50,"anchor_y":40,"side":"top","articleCode":"1053/45"}]}`,
+                    },
+                ],
+            },
+        ],
+    });
+    await trackAiUsage({
+        accountId,
+        model: "claude-haiku-4-5",
+        feature: "price_tag",
+        inputTokens: message.usage.input_tokens,
+        outputTokens: message.usage.output_tokens,
+    });
+    let aiTags = [];
+    try {
+        const block = message.content[0];
+        if (block.type === "text") {
+            const jsonText = block.text.trim().replace(/^```json\s*/i, "").replace(/```\s*$/, "").trim();
+            const result = JSON.parse(jsonText);
+            aiTags = Array.isArray(result.tags) ? result.tags : [];
+        }
+    }
+    catch {
+        req.log.warn("Failed to parse AI response for price tagging");
+    }
+    const clampPct = (n) => Math.min(100, Math.max(0, Number.isFinite(n) ? n : 50));
+    const tags = aiTags.map((t, idx) => {
+        var _a;
+        const matched = items.find((i) => i.articleCode === t.articleCode);
+        const fallback = items[idx % items.length];
+        const chosen = matched !== null && matched !== void 0 ? matched : fallback;
+        return {
+            anchor_x: clampPct(t.anchor_x),
+            anchor_y: clampPct(t.anchor_y),
+            side: t.side === "bottom" ? "bottom" : "top",
+            articleCode: chosen.articleCode,
+            price: chosen.price,
+            label: (_a = chosen.label) !== null && _a !== void 0 ? _a : chosen.articleCode,
+        };
+    });
+    res.json({ tags });
 });
 export default router;
