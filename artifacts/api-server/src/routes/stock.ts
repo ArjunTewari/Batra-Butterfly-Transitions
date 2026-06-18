@@ -42,9 +42,10 @@ function loadCloudinaryCatalog(): Map<string, string[]> {
 }
 const cloudinaryImageMap = loadCloudinaryCatalog();
 
-// Anthropic's many-image requests require ≤2000px per dimension.
-// Insert a Cloudinary resize transformation into the URL to enforce this.
-function cloudinaryResized(url: string, maxPx = 1500): string {
+// Resize Cloudinary images before sending to Anthropic.
+// At 800px max: ~640 tokens per image — lets us fit 200 refs in one call (128K tokens).
+// Anthropic also enforces ≤2000px per dimension in multi-image requests.
+function cloudinaryResized(url: string, maxPx = 800): string {
   // Cloudinary URL: https://res.cloudinary.com/<cloud>/image/upload/<transforms?>/v<ver>/<id>
   return url.replace(/\/image\/upload\//, `/image/upload/w_${maxPx},h_${maxPx},c_limit/`);
 }
@@ -486,34 +487,46 @@ router.post("/stock/analyze-sale", requireAuth, async (req, res): Promise<void> 
   const { rawBase64, mediaType } = parseBase64Image(imageBase64);
   const articleCodeList = productList.map(p => `${p.articleCode} (${p.name}, stock: ${p.currentStock})`).join("\n");
 
-  // Build reference list from Cloudinary catalog — 1 image per product.
-  // Use resized URLs (≤1500px) to satisfy Anthropic's multi-image dimension limit.
-  interface RefCandidate { articleCode: string; url: string }
-  const candidates: RefCandidate[] = [];
+  // Strategy: 4 parallel calls, each using a DIFFERENT image index across ALL products.
+  // Call 0 → image[0] per product, call 1 → image[1], etc.
+  // This gives every product 4 chances to match (using its different reference photos),
+  // and Claude always sees the full catalog so it can distinguish true matches.
+  // At 800px max, each image ≈ 640 tokens → 200 refs × 640 = 128K tokens per call (fits in 200K context).
+
+  interface RefEntry { articleCode: string; data: string; mediaType: "image/jpeg" | "image/png" | "image/gif" | "image/webp" }
+
+  // Collect all URLs grouped by image index across all products
+  const NUM_CALLS = 4;
+  const urlsByIndex: Array<Array<{ articleCode: string; url: string }>> = Array.from({ length: NUM_CALLS }, () => []);
   for (const [code, urls] of cloudinaryImageMap.entries()) {
-    if (urls[0]) candidates.push({ articleCode: code, url: cloudinaryResized(urls[0]) });
+    for (let i = 0; i < NUM_CALLS; i++) {
+      if (urls[i]) urlsByIndex[i].push({ articleCode: code, url: cloudinaryResized(urls[i]) });
+    }
   }
 
-  // Pre-fetch ALL reference images as base64 on our server so Anthropic never
-  // fetches any URL (avoids Anthropic's 100 URL/min content-fetching rate limit).
-  req.log.info({ count: candidates.length }, "Fetching reference images as base64");
-  const fetchedRefs = await Promise.all(
-    candidates.map(async (c) => {
-      const fetched = await fetchImageAsBase64(c.url);
+  // Fetch all images in parallel (deduplicated across calls)
+  const allUrls = urlsByIndex.flat();
+  req.log.info({ totalImages: allUrls.length }, "Fetching all reference images as base64");
+  const fetchResults = await Promise.all(
+    allUrls.map(async ({ articleCode, url }) => {
+      const fetched = await fetchImageAsBase64(url);
       if (!fetched) return null;
       const { rawBase64: refRaw } = parseBase64Image(fetched.base64);
-      return { articleCode: c.articleCode, data: refRaw, mediaType: fetched.mediaType };
+      return { articleCode, url, data: refRaw, mediaType: fetched.mediaType } as RefEntry & { url: string };
     })
   );
-  interface RefEntry { articleCode: string; data: string; mediaType: "image/jpeg" | "image/png" | "image/gif" | "image/webp" }
-  const allRefs: RefEntry[] = fetchedRefs.filter((r): r is RefEntry => r !== null);
-  req.log.info({ fetched: allRefs.length, failed: candidates.length - allRefs.length }, "Reference images ready");
 
-  // Split into exactly 4 parallel AI calls
-  const NUM_BATCHES = 4;
-  const batches: RefEntry[][] = [[], [], [], []];
-  allRefs.forEach((ref, i) => batches[i % NUM_BATCHES].push(ref));
-  const activeBatches = batches.some(b => b.length > 0) ? batches : [[]];
+  // Rebuild the 4 call batches using fetched base64 data
+  const fetchMap = new Map(fetchResults.filter(Boolean).map(r => [r!.url, r!]));
+  const activeBatches: RefEntry[][] = urlsByIndex.map(group =>
+    group.map(({ articleCode, url }) => {
+      const f = fetchMap.get(url);
+      return f ? { articleCode, data: f.data, mediaType: f.mediaType } : null;
+    }).filter((r): r is RefEntry => r !== null)
+  ).filter(batch => batch.length > 0);
+
+  if (activeBatches.length === 0) activeBatches.push([]);
+  req.log.info({ calls: activeBatches.length, sizes: activeBatches.map(b => b.length) }, "Reference images ready");
 
   type ContentBlock =
     | { type: "image"; source: { type: "base64"; media_type: "image/jpeg" | "image/png" | "image/gif" | "image/webp"; data: string } }
@@ -526,17 +539,16 @@ ${articleCodeList || "(no products yet)"}
 
 Instructions:
 - Look at the SALE PHOTO (first image). Identify every DISTINCT shoe model/style visible.
-- For EACH visible item, compare it against the REFERENCE PHOTOS above (labelled with article codes).
-- ONLY include an item in your response if a reference photo is a clear visual match (same style, colour, strap pattern, sole). Confidence must be ≥ 0.85.
-- If NONE of the reference photos closely match a visible item, do NOT include that item — return an empty items array for this batch rather than guessing.
-- Do NOT force a match just because it is the "closest" reference — only include genuine matches.
+- For EACH visible item, compare it against ALL REFERENCE PHOTOS above (each labelled with its article code in square brackets).
+- Include an item ONLY when you find a genuinely close visual match — same style, silhouette, colour, strap/buckle pattern, and sole. Do NOT guess or pick the "closest" if it is not a real match.
+- If a visible item has no close match in the reference photos, skip it entirely.
 - Estimate the quantity of each matched article visible in the sale photo.
 - Return ONLY valid JSON, no markdown, no explanation.
 
 Return this exact JSON format:
 {
   "items": [
-    { "articleCode": "1053/45", "quantity": 2, "confidence": 0.92, "reasoning": "Same beige slide with gold buckle" }
+    { "articleCode": "1053/45", "quantity": 2, "confidence": 0.92, "reasoning": "Same beige slide with round gold logo buckle" }
   ]
 }`;
 
@@ -596,13 +608,10 @@ Return this exact JSON format:
     }
   }
 
-  // Filter to only high-confidence matches (≥85%).
-  // Genuine matches score 90%+ when their reference is in the batch.
-  // False positives from batches that lack the right reference score below 85%.
-  const CONFIDENCE_THRESHOLD = 0.85;
-  const allMerged = Array.from(bestByCode.values()).sort((a, b) => (b.confidence ?? 0) - (a.confidence ?? 0));
-  const mergedItems = allMerged.filter(item => (item.confidence ?? 0) >= CONFIDENCE_THRESHOLD);
-  req.log.info({ batches: activeBatches.length, candidates: allMerged.length, detected: mergedItems.length }, "Sale analysis complete");
+  // Merge results: for each article code keep the highest-confidence detection across all 4 calls.
+  // No artificial threshold — Claude's instructions already prevent forced/guessed matches.
+  const mergedItems = Array.from(bestByCode.values()).sort((a, b) => (b.confidence ?? 0) - (a.confidence ?? 0));
+  req.log.info({ calls: activeBatches.length, detected: mergedItems.length }, "Sale analysis complete");
 
   const detectedItems = mergedItems.map((item) => {
     const matchedProduct = productList.find(p => p.articleCode === item.articleCode) ?? null;
