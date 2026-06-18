@@ -113,6 +113,22 @@ function parseBase64Image(imageBase64: string): { rawBase64: string; mediaType: 
   return { rawBase64, mediaType };
 }
 
+async function fetchImageAsBase64(url: string): Promise<{ base64: string; mediaType: "image/jpeg" | "image/png" | "image/gif" | "image/webp" } | null> {
+  try {
+    const resp = await fetch(url, { timeout: 8000 } as any);
+    if (!resp.ok) return null;
+    const buffer = Buffer.from(await resp.arrayBuffer());
+    const contentType = resp.headers.get("content-type") ?? "";
+    const mediaType = (["image/jpeg", "image/png", "image/gif", "image/webp"].includes(contentType)
+      ? contentType
+      : "image/jpeg") as "image/jpeg" | "image/png" | "image/gif" | "image/webp";
+    const base64 = `data:${mediaType};base64,${buffer.toString("base64")}`;
+    return { base64, mediaType };
+  } catch {
+    return null;
+  }
+}
+
 router.get("/stock", requireAuth, async (req, res): Promise<void> => {
   const accountId = req.session.accountId!;
   const products = await db.select().from(productsTable).where(eq(productsTable.accountId, accountId)).orderBy(productsTable.name);
@@ -467,8 +483,16 @@ router.post("/stock/analyze-sale", requireAuth, async (req, res): Promise<void> 
       type: "text",
       text: `Below are REFERENCE PHOTOS of known products from the catalog. Each reference is preceded by its article code. Compare the sale photo against these reference photos to find the closest visual match (color, pattern, strap style, sole, embellishments).`,
     });
-    for (const ref of reference) {
-      const { rawBase64: refRaw, mediaType: refMime } = parseBase64Image(ref.image);
+    // Fetch all reference images in parallel
+    const refBase64 = await Promise.all(
+      reference.map(async (ref) => {
+        const fetched = await fetchImageAsBase64(ref.image);
+        return fetched ? { articleCode: ref.articleCode, name: ref.name, base64: fetched.base64, mediaType: fetched.mediaType } : null;
+      })
+    );
+    for (const ref of refBase64) {
+      if (!ref) continue;
+      const { rawBase64: refRaw, mediaType: refMime } = parseBase64Image(ref.base64);
       content.push({ type: "text", text: `Reference — ${ref.articleCode} (${ref.name}):` });
       content.push({ type: "image", source: { type: "base64", media_type: refMime, data: refRaw } });
     }
