@@ -612,22 +612,42 @@ Return this exact JSON format:
     })
   );
 
-  // Merge by itemIndex: for each of the N items, keep the highest-confidence match
+  // Merge by itemIndex: for each of the N items, keep the highest-confidence match.
+  // EARLY-ACCEPT: once an item hits >=0.95 confidence, lock it in and ignore any
+  // further (already-completed, since all 4 calls run in parallel) results for
+  // that same itemIndex — we don't try to "improve" an already-confident match.
+  const CONFIDENCE_LOCK_THRESHOLD = 0.95;
   const bestByIndex = new Map<number, AiItem>();
+  const lockedIndices = new Set<number>();
   for (const result of batchResults) {
     if (result.status === "rejected") { req.log.warn({ reason: String(result.reason) }, "Phase 2 batch failed"); continue; }
     for (const item of result.value) {
       if (!item.itemIndex) continue;
+      if (lockedIndices.has(item.itemIndex)) continue; // already confident enough, skip
       const existing = bestByIndex.get(item.itemIndex);
       if (!existing || (item.confidence ?? 0) > (existing.confidence ?? 0)) {
         bestByIndex.set(item.itemIndex, item);
+        if ((item.confidence ?? 0) >= CONFIDENCE_LOCK_THRESHOLD) {
+          lockedIndices.add(item.itemIndex);
+        }
       }
     }
   }
 
-  // Result is capped at exactly the N items from Phase 1
-  const mergedItems = Array.from(bestByIndex.values())
-    .filter(i => i.articleCode && i.articleCode !== "UNKNOWN")
+  // Collapse by articleCode: if two different Phase-1 indices (e.g. left/right
+  // shoe mistakenly split into separate items) resolved to the SAME catalog
+  // article, they're the same physical item — keep only the higher-confidence one.
+  const bestByArticleCode = new Map<string, AiItem>();
+  for (const item of bestByIndex.values()) {
+    if (!item.articleCode || item.articleCode === "UNKNOWN") continue;
+    const existing = bestByArticleCode.get(item.articleCode);
+    if (!existing || (item.confidence ?? 0) > (existing.confidence ?? 0)) {
+      bestByArticleCode.set(item.articleCode, item);
+    }
+  }
+
+  // Result is capped at exactly the number of distinct catalog articles matched
+  const mergedItems = Array.from(bestByArticleCode.values())
     .sort((a, b) => (b.confidence ?? 0) - (a.confidence ?? 0));
   req.log.info({ phase1Count: detectedItemsPhase1.length, detected: mergedItems.length }, "Sale analysis complete");
 
