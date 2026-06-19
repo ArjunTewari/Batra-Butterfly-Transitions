@@ -1,0 +1,276 @@
+File: artifacts/api-server/src/routes/stock.ts
+Find this entire block (starts at the // ── PHASE 2 comment, ends right before router.post("/stock/confirm-sale"):
+ts  // ── PHASE 2: Match each detected item to catalog (4 parallel calls) ──────────
+  // Each call uses a different reference image index per product so every product
+  // gets 4 chances; Claude is told the exact item list from Phase 1 to match against.
+
+  interface RefEntry { articleCode: string; data: string; mediaType: "image/jpeg" | "image/png" | "image/gif" | "image/webp" }
+
+  const NUM_CALLS = 4;
+  const urlsByIndex: Array<Array<{ articleCode: string; url: string }>> = Array.from({ length: NUM_CALLS }, () => []);
+  for (const [code, urls] of cloudinaryImageMap.entries()) {
+    for (let i = 0; i < NUM_CALLS; i++) {
+      if (urls[i]) urlsByIndex[i].push({ articleCode: code, url: cloudinaryResized(urls[i]) });
+    }
+  }
+
+  const allUrls = urlsByIndex.flat();
+  req.log.info({ totalImages: allUrls.length }, "Phase 2: fetching reference images");
+  const fetchResults = await Promise.all(
+    allUrls.map(async ({ articleCode, url }) => {
+      const fetched = await fetchImageAsBase64(url);
+      if (!fetched) return null;
+      const { rawBase64: refRaw } = parseBase64Image(fetched.base64);
+      return { articleCode, url, data: refRaw, mediaType: fetched.mediaType } as RefEntry & { url: string };
+    })
+  );
+
+  const fetchMap = new Map(fetchResults.filter(Boolean).map(r => [r!.url, r!]));
+  const activeBatches: RefEntry[][] = urlsByIndex.map(group =>
+    group.map(({ articleCode, url }) => {
+      const f = fetchMap.get(url);
+      return f ? { articleCode, data: f.data, mediaType: f.mediaType } : null;
+    }).filter((r): r is RefEntry => r !== null)
+  ).filter(batch => batch.length > 0);
+  if (activeBatches.length === 0) activeBatches.push([]);
+
+  const itemListText = detectedItemsPhase1.map(i => `Item ${i.index}: ${i.description}`).join("\n");
+
+  const MATCH_INSTRUCTIONS = `You are matching footwear from a sale photo to catalog products.
+
+The sale photo contains EXACTLY ${detectedItemsPhase1.length} distinct item(s):
+${itemListText}
+
+Full catalog (article code, name, stock):
+${articleCodeList || "(no products yet)"}
+
+Instructions:
+- For each of the ${detectedItemsPhase1.length} described items above, find its best matching article code from the REFERENCE PHOTOS (each labelled [articleCode]).
+- Match by visual similarity: style, colour, silhouette, hardware/buckle/logo, sole shape.
+- Return exactly one entry per item. If no reference photo closely matches an item, use "UNKNOWN".
+- Return ONLY valid JSON, no markdown.
+
+Return this exact JSON format:
+{"items":[{"itemIndex":1,"articleCode":"1001/101","quantity":1,"confidence":0.92,"reasoning":"Same beige slide with round YSL gold logo"}]}`;
+
+  const batchResults = await Promise.allSettled(
+    activeBatches.map(async (batchRefs, batchIdx) => {
+      const content: ContentBlock[] = [];
+      content.push({ type: "text", text: "You are a footwear inventory expert matching items in a sale photo to catalog products." });
+      content.push({ type: "image", source: { type: "base64", media_type: mediaType, data: rawBase64 } });
+      if (batchRefs.length > 0) {
+        content.push({ type: "text", text: `REFERENCE PHOTOS (${batchRefs.length} catalog products, each labelled with [articleCode]):` });
+        for (const ref of batchRefs) {
+          content.push({ type: "text", text: `[${ref.articleCode}]` });
+          content.push({ type: "image", source: { type: "base64", media_type: ref.mediaType, data: ref.data } });
+        }
+      }
+      content.push({ type: "text", text: MATCH_INSTRUCTIONS });
+      const msg = await anthropic.messages.create({
+        model: "claude-sonnet-4-6",
+        max_tokens: 2048,
+        messages: [{ role: "user", content }],
+      });
+      const block = msg.content[0];
+      const rawText = block.type === "text" ? block.text.trim().replace(/^```json\s*/i, "").replace(/```\s*$/, "").trim() : "";
+      req.log.info({ batchIdx, refs: batchRefs.length, rawText }, "Phase 2 batch response");
+      try {
+        const obj = JSON.parse(rawText) as { items: AiItem[] };
+        return Array.isArray(obj.items) ? obj.items : [];
+      } catch { return []; }
+    })
+  );
+
+  // Merge by itemIndex: for each of the N items, keep the highest-confidence match
+  const bestByIndex = new Map<number, AiItem>();
+  for (const result of batchResults) {
+    if (result.status === "rejected") { req.log.warn({ reason: String(result.reason) }, "Phase 2 batch failed"); continue; }
+    for (const item of result.value) {
+      if (!item.itemIndex) continue;
+      const existing = bestByIndex.get(item.itemIndex);
+      if (!existing || (item.confidence ?? 0) > (existing.confidence ?? 0)) {
+        bestByIndex.set(item.itemIndex, item);
+      }
+    }
+  }
+
+  // Result is capped at exactly the N items from Phase 1
+  const mergedItems = Array.from(bestByIndex.values())
+    .filter(i => i.articleCode && i.articleCode !== "UNKNOWN")
+    .sort((a, b) => (b.confidence ?? 0) - (a.confidence ?? 0));
+  req.log.info({ phase1Count: detectedItemsPhase1.length, detected: mergedItems.length }, "Sale analysis complete");
+
+  const responseItems = mergedItems.map((item) => {
+    const matchedProduct = productList.find(p => p.articleCode === item.articleCode) ?? null;
+    // Use quantity from Phase 1 if available, otherwise fall back to Phase 2's estimate
+    const phase1Item = detectedItemsPhase1.find(d => d.index === item.itemIndex);
+    return {
+      articleCode: item.articleCode,
+      quantity: Math.max(1, Math.round(phase1Item?.quantity ?? item.quantity ?? 1)),
+      confidence: Math.round((item.confidence ?? 0.5) * 100) / 100,
+      reasoning: item.reasoning,
+      matchedProduct: matchedProduct ?? undefined,
+      notFound: !matchedProduct || item.articleCode === "UNKNOWN",
+    };
+  });
+
+  responseItems.sort((a, b) => b.confidence - a.confidence);
+
+  res.json({
+    detectedItems: responseItems,
+    imageUrl: imageBase64,
+  });
+});
+Replace it entirely with:
+ts  // ── PHASE 2: Match each detected item to catalog ──────────────────────────
+  // One item per call (not all N items crammed into one response) — asking a
+  // single call to judge+write out N items in one pass causes confidence to
+  // decay across the list (the model is measurably less rigorous by the time
+  // it reaches item #8, #9, #10 of a single generated response). Each of the
+  // N detected items gets its own 4 parallel calls instead, so every item
+  // gets full, undivided model attention. Total calls = 4 × N.
+
+  interface RefEntry { articleCode: string; data: string; mediaType: "image/jpeg" | "image/png" | "image/gif" | "image/webp" }
+
+  const NUM_CALLS_PER_ITEM = 4;
+  const urlsByIndex: Array<Array<{ articleCode: string; url: string }>> = Array.from({ length: NUM_CALLS_PER_ITEM }, () => []);
+  for (const [code, urls] of cloudinaryImageMap.entries()) {
+    for (let i = 0; i < NUM_CALLS_PER_ITEM; i++) {
+      if (urls[i]) urlsByIndex[i].push({ articleCode: code, url: cloudinaryResized(urls[i]) });
+    }
+  }
+
+  // Reference images are shared across all items — fetched once, reused for
+  // every item's 4 calls, so this cost doesn't multiply by N.
+  const allUrls = urlsByIndex.flat();
+  req.log.info({ totalImages: allUrls.length }, "Phase 2: fetching reference images");
+  const fetchResults = await Promise.all(
+    allUrls.map(async ({ articleCode, url }) => {
+      const fetched = await fetchImageAsBase64(url);
+      if (!fetched) return null;
+      const { rawBase64: refRaw } = parseBase64Image(fetched.base64);
+      return { articleCode, url, data: refRaw, mediaType: fetched.mediaType } as RefEntry & { url: string };
+    })
+  );
+
+  const fetchMap = new Map(fetchResults.filter(Boolean).map(r => [r!.url, r!]));
+  const activeBatches: RefEntry[][] = urlsByIndex.map(group =>
+    group.map(({ articleCode, url }) => {
+      const f = fetchMap.get(url);
+      return f ? { articleCode, data: f.data, mediaType: f.mediaType } : null;
+    }).filter((r): r is RefEntry => r !== null)
+  ).filter(batch => batch.length > 0);
+  if (activeBatches.length === 0) activeBatches.push([]);
+
+  const CONFIDENCE_LOCK_THRESHOLD = 0.95;
+
+  function buildSingleItemInstructions(item: DetectedItem): string {
+    return `You are matching ONE piece of footwear from a sale photo to a single catalog product.
+
+The item to match:
+"${item.description}"
+
+Full catalog (article code, name, stock):
+${articleCodeList || "(no products yet)"}
+
+Instructions:
+- Look ONLY at this one described item (ignore any other footwear visible elsewhere in the sale photo).
+- Find its best matching article code from the REFERENCE PHOTOS (each labelled [articleCode]).
+- Match by visual similarity: style, colour, silhouette, hardware/buckle/logo, sole shape.
+- Return exactly ONE entry — your single best match. If no reference photo closely matches, use "UNKNOWN".
+- Return ONLY valid JSON, no markdown.
+
+Return this exact JSON format:
+{"items":[{"articleCode":"1001/101","quantity":1,"confidence":0.92,"reasoning":"Same beige slide with round YSL gold logo"}]}`;
+  }
+
+  // For one detected item, fire NUM_CALLS_PER_ITEM parallel calls and merge
+  // to the single best match. EARLY-ACCEPT: once a call returns >=0.95
+  // confidence, later (already in-flight/completed, since all calls for this
+  // item run in parallel) results are ignored rather than compared — we don't
+  // try to "improve" an already-confident match for this item.
+  async function matchOneItem(item: DetectedItem): Promise<AiItem | null> {
+    const instructions = buildSingleItemInstructions(item);
+    const callResults = await Promise.allSettled(
+      activeBatches.map(async (batchRefs, batchIdx) => {
+        const content: ContentBlock[] = [];
+        content.push({ type: "text", text: "You are a footwear inventory expert matching one item from a sale photo to a catalog product." });
+        content.push({ type: "image", source: { type: "base64", media_type: mediaType, data: rawBase64 } });
+        if (batchRefs.length > 0) {
+          content.push({ type: "text", text: `REFERENCE PHOTOS (${batchRefs.length} catalog products, each labelled with [articleCode]):` });
+          for (const ref of batchRefs) {
+            content.push({ type: "text", text: `[${ref.articleCode}]` });
+            content.push({ type: "image", source: { type: "base64", media_type: ref.mediaType, data: ref.data } });
+          }
+        }
+        content.push({ type: "text", text: instructions });
+        const msg = await anthropic.messages.create({
+          model: "claude-sonnet-4-6",
+          max_tokens: 1024,
+          messages: [{ role: "user", content }],
+        });
+        const block = msg.content[0];
+        const rawText = block.type === "text" ? block.text.trim().replace(/^```json\s*/i, "").replace(/```\s*$/, "").trim() : "";
+        req.log.info({ itemIndex: item.index, batchIdx, refs: batchRefs.length, rawText }, "Phase 2 single-item call response");
+        try {
+          const obj = JSON.parse(rawText) as { items: Array<Omit<AiItem, "itemIndex">> };
+          const first = Array.isArray(obj.items) ? obj.items[0] : undefined;
+          return first ? { ...first, itemIndex: item.index } as AiItem : null;
+        } catch { return null; }
+      })
+    );
+
+    let best: AiItem | null = null;
+    for (const result of callResults) {
+      if (result.status === "rejected") { req.log.warn({ itemIndex: item.index, reason: String(result.reason) }, "Phase 2 single-item call failed"); continue; }
+      const candidate = result.value;
+      if (!candidate) continue;
+      if (best && (best.confidence ?? 0) >= CONFIDENCE_LOCK_THRESHOLD) continue; // already locked, ignore further results for this item
+      if (!best || (candidate.confidence ?? 0) > (best.confidence ?? 0)) {
+        best = candidate;
+      }
+    }
+    return best;
+  }
+
+  req.log.info({ itemCount: detectedItemsPhase1.length, callsPerItem: NUM_CALLS_PER_ITEM }, "Phase 2: matching each item individually");
+  const perItemResults = await Promise.all(detectedItemsPhase1.map((item) => matchOneItem(item)));
+
+  // Collapse by articleCode: if two different Phase-1 indices (e.g. left/right
+  // shoe mistakenly split into separate items) resolved to the SAME catalog
+  // article, they're the same physical item — keep only the higher-confidence one.
+  const bestByArticleCode = new Map<string, AiItem>();
+  for (const item of perItemResults) {
+    if (!item || !item.articleCode || item.articleCode === "UNKNOWN") continue;
+    const existing = bestByArticleCode.get(item.articleCode);
+    if (!existing || (item.confidence ?? 0) > (existing.confidence ?? 0)) {
+      bestByArticleCode.set(item.articleCode, item);
+    }
+  }
+
+  // Result is capped at exactly the number of distinct catalog articles matched
+  const mergedItems = Array.from(bestByArticleCode.values())
+    .sort((a, b) => (b.confidence ?? 0) - (a.confidence ?? 0));
+  req.log.info({ phase1Count: detectedItemsPhase1.length, detected: mergedItems.length }, "Sale analysis complete");
+
+  const responseItems = mergedItems.map((item) => {
+    const matchedProduct = productList.find(p => p.articleCode === item.articleCode) ?? null;
+    // Use quantity from Phase 1 if available, otherwise fall back to Phase 2's estimate
+    const phase1Item = detectedItemsPhase1.find(d => d.index === item.itemIndex);
+    return {
+      articleCode: item.articleCode,
+      quantity: Math.max(1, Math.round(phase1Item?.quantity ?? item.quantity ?? 1)),
+      confidence: Math.round((item.confidence ?? 0.5) * 100) / 100,
+      reasoning: item.reasoning,
+      matchedProduct: matchedProduct ?? undefined,
+      notFound: !matchedProduct || item.articleCode === "UNKNOWN",
+    };
+  });
+
+  responseItems.sort((a, b) => b.confidence - a.confidence);
+
+  res.json({
+    detectedItems: responseItems,
+    imageUrl: imageBase64,
+  });
+});
