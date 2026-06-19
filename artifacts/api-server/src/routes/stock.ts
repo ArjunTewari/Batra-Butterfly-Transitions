@@ -646,8 +646,11 @@ Return this exact JSON format:
     }
   }
 
-  // Result is capped at exactly the number of distinct catalog articles matched
+  // Result is capped at exactly the number of distinct catalog articles matched.
+  // Drop anything below 80% confidence — those are uncertain matches not worth showing.
+  const MIN_CONFIDENCE = 0.80;
   const mergedItems = Array.from(bestByArticleCode.values())
+    .filter(i => (i.confidence ?? 0) >= MIN_CONFIDENCE)
     .sort((a, b) => (b.confidence ?? 0) - (a.confidence ?? 0));
   req.log.info({ phase1Count: detectedItemsPhase1.length, detected: mergedItems.length }, "Sale analysis complete");
 
