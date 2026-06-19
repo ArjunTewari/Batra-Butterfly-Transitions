@@ -546,18 +546,25 @@ Return ONLY valid JSON, no markdown:
   req.log.info({ left: leftItems.length, center: centerItems.length, right: rightItems.length }, "Phase 1 raw region counts");
 
   // Merge + deduplicate across regions. Two detections are considered duplicates
-  // if their descriptions share ≥2 significant words (colour + style type is
-  // enough to collapse "black slide with buckle" from left and center regions).
+  // if their descriptions share ≥3 significant words. Generic footwear-type
+  // words (slide, sandal, heel, etc.) are excluded from the count because they
+  // appear in nearly every description and carry no discriminating power —
+  // without this, "beige slide with bow" and "black slide with buckle" would
+  // share "slide" + one colour word and wrongly collapse into one item.
+  const FOOTWEAR_GENERIC = new Set(["slide","sandal","sandals","heel","heels","boot","boots","flat","flats","slipper","slippers","shoe","shoes","chappal","chappals","wedge","platform","flip","flop","thong","mule","loafer"]);
   function significantWords(desc: string): Set<string> {
-    const stopWords = new Set(["with","and","the","a","an","of","in","on","at","to","for","or","by","from","its","this","that"]);
-    return new Set(desc.toLowerCase().split(/\W+/).filter(w => w.length > 2 && !stopWords.has(w)));
+    const stopWords = new Set(["with","and","the","a","an","of","in","on","at","to","for","or","by","from","its","this","that","style","type","pair","pairs"]);
+    return new Set(
+      desc.toLowerCase().split(/\W+/)
+        .filter(w => w.length > 2 && !stopWords.has(w) && !FOOTWEAR_GENERIC.has(w))
+    );
   }
   function isDuplicate(a: string, b: string): boolean {
     const wa = significantWords(a);
     const wb = significantWords(b);
     let shared = 0;
     for (const w of wa) { if (wb.has(w)) shared++; }
-    return shared >= 2;
+    return shared >= 3; // needs colour + hardware + one more specific feature to be considered same item
   }
 
   const merged: DetectedItem[] = [];
