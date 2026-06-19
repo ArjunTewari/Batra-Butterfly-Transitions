@@ -1,0 +1,124 @@
+File: artifacts/api-server/src/routes/stock.ts
+Find this entire block:
+ts  // ── PHASE 1: Count exactly how many distinct items are in the photo ──────────
+  // No catalog references here — pure vision count so we anchor the result count.
+  req.log.info("Phase 1: counting distinct items in sale photo");
+  const countMsg = await anthropic.messages.create({
+    model: "claude-sonnet-4-6",
+    max_tokens: 1024,
+    messages: [{
+      role: "user",
+      content: [
+        {
+          type: "text",
+          text: `Look at this footwear sale photo carefully. Count every DISTINCT shoe model or style visible — each unique design counts once regardless of how many pairs there are.
+
+For each distinct item assign a sequential index (1, 2, 3…) and give a short description (colour, key style feature, hardware detail).
+
+Return ONLY valid JSON, no markdown:
+{"items":[{"index":1,"description":"beige slide with round YSL-style gold logo","quantity":1}]}`,
+        },
+        { type: "image", source: { type: "base64", media_type: mediaType, data: rawBase64 } },
+      ] as ContentBlock[],
+    }],
+  });
+
+  const countBlock = countMsg.content[0];
+  const countRaw = countBlock.type === "text" ? countBlock.text.trim().replace(/^```json\s*/i, "").replace(/```\s*$/, "").trim() : "{}";
+  let detectedItemsPhase1: DetectedItem[] = [];
+  try {
+    const parsed2 = JSON.parse(countRaw) as { items: DetectedItem[] };
+    detectedItemsPhase1 = Array.isArray(parsed2.items) ? parsed2.items : [];
+  } catch { /* fall through with empty list */ }
+  req.log.info({ count: detectedItemsPhase1.length, items: detectedItemsPhase1.map(i => i.description) }, "Phase 1 complete");
+
+  if (detectedItemsPhase1.length === 0) {
+    res.json({ detectedItems: [], imageUrl: imageBase64 });
+    return;
+  }
+Replace with:
+ts  // ── PHASE 1: Detect all distinct items via 3 parallel crop-region calls ──────
+  // Problem: a single call on a wide lineup photo misses items at the edges or
+  // in overlap zones. Fix: run 3 simultaneous calls, each told to focus on a
+  // different spatial third (left / center / right). Results are merged and
+  // deduplicated by description similarity before Phase 2.
+  //
+  // Fix 2 — quantity: the example in the old prompt showed quantity:1 for every
+  // item, anchoring the model to always return 1. Prompt now explicitly asks
+  // for the count of PAIRS of each style visible in the photo.
+
+  async function detectItemsInRegion(region: "left third" | "center third" | "right third"): Promise<DetectedItem[]> {
+    const msg = await anthropic.messages.create({
+      model: "claude-sonnet-4-6",
+      max_tokens: 1024,
+      messages: [{
+        role: "user",
+        content: [
+          {
+            type: "text",
+            text: `Look at this footwear sale photo. Focus specifically on the ${region} of the image.
+
+Identify every DISTINCT shoe model or style visible in that region — each unique design counts once regardless of how many individual shoes are shown (a matching pair = 1 distinct style).
+
+For each distinct item:
+- Assign a short description covering: colour, style type (slide/sandal/heel/boot/etc), and 1-2 key distinguishing features (buckle, bow, logo, embellishment, sole type, strap pattern).
+- Count how many PAIRS of that style are visible in the photo (usually 1, but count carefully).
+- Include partially-visible items if you can clearly identify their style.
+
+Return ONLY valid JSON, no markdown:
+{"items":[{"index":1,"description":"black slide with square silver buckle and zebra-print lining","quantity":1},{"index":2,"description":"beige flat slide with round gold YSL-style logo medallion","quantity":2}]}`,
+          },
+          { type: "image", source: { type: "base64", media_type: mediaType, data: rawBase64 } },
+        ] as ContentBlock[],
+      }],
+    });
+    const block = msg.content[0];
+    const raw = block.type === "text" ? block.text.trim().replace(/^```json\s*/i, "").replace(/```\s*$/, "").trim() : "{}";
+    try {
+      const obj = JSON.parse(raw) as { items: DetectedItem[] };
+      return Array.isArray(obj.items) ? obj.items : [];
+    } catch { return []; }
+  }
+
+  req.log.info("Phase 1: detecting items across 3 crop regions in parallel");
+  const [leftItems, centerItems, rightItems] = await Promise.all([
+    detectItemsInRegion("left third"),
+    detectItemsInRegion("center third"),
+    detectItemsInRegion("right third"),
+  ]);
+  req.log.info({ left: leftItems.length, center: centerItems.length, right: rightItems.length }, "Phase 1 raw region counts");
+
+  // Merge + deduplicate across regions. Two detections are considered duplicates
+  // if their descriptions share ≥2 significant words (colour + style type is
+  // enough to collapse "black slide with buckle" from left and center regions).
+  function significantWords(desc: string): Set<string> {
+    const stopWords = new Set(["with","and","the","a","an","of","in","on","at","to","for","or","by","from","its","this","that"]);
+    return new Set(desc.toLowerCase().split(/\W+/).filter(w => w.length > 2 && !stopWords.has(w)));
+  }
+  function isDuplicate(a: string, b: string): boolean {
+    const wa = significantWords(a);
+    const wb = significantWords(b);
+    let shared = 0;
+    for (const w of wa) { if (wb.has(w)) shared++; }
+    return shared >= 2;
+  }
+
+  const merged: DetectedItem[] = [];
+  for (const item of [...leftItems, ...centerItems, ...rightItems]) {
+    const duplicate = merged.find(existing => isDuplicate(existing.description, item.description));
+    if (duplicate) {
+      // Keep the better description (longer = more detail) and max quantity
+      if (item.description.length > duplicate.description.length) duplicate.description = item.description;
+      duplicate.quantity = Math.max(duplicate.quantity, item.quantity);
+    } else {
+      merged.push({ ...item, index: merged.length + 1 }); // re-index sequentially
+    }
+  }
+
+  const detectedItemsPhase1 = merged;
+  req.log.info({ count: detectedItemsPhase1.length, items: detectedItemsPhase1.map(i => i.description) }, "Phase 1 complete (after dedup)");
+
+  if (detectedItemsPhase1.length === 0) {
+    res.json({ detectedItems: [], imageUrl: imageBase64 });
+    return;
+  }
