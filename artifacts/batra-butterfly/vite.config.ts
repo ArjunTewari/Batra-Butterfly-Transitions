@@ -49,6 +49,10 @@ export default defineConfig({
         main: path.resolve(import.meta.dirname, "index.html"),
         mobile: path.resolve(import.meta.dirname, "mobile/index.html"),
       },
+      onwarn(warning, warn) {
+        if (warning.code === "SOURCEMAP_ERROR") return;
+        warn(warning);
+      },
     },
   },
   server: {
