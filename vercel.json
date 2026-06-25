@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "buildCommand": "pnpm run build:api && pnpm run build:frontend",
+  "buildCommand": "pnpm -w run build:api && pnpm -w run build:frontend",
   "outputDirectory": "artifacts/batra-butterfly/dist/public",
   "functions": {
     "api/index.js": {
